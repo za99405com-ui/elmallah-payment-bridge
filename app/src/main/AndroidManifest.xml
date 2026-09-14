@@ -8,15 +8,16 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
-        android:name=".paymentbridge.AlMallahBridgeApp"
-        android:allowBackup="true"
+        android:name=".AlMallahBridgeApp"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MyApplication">
+        android:theme="@style/Theme.MyApplication"
+        tools:replace="android:allowBackup">
 
         <activity
             android:name=".MainActivity"
@@ -33,7 +34,7 @@
 
         <!-- Notification Listener Service to capture SMS notifications from messaging apps -->
         <service
-            android:name=".paymentbridge.capture.PaymentNotificationListener"
+            android:name=".capture.PaymentNotificationListener"
             android:exported="true"
             android:label="AlMallah Payment Notification Service"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
