@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Shield Contour -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M54,24 C68,24 80,28 80,42 C80,63 54,84 54,84 C54,84 28,63 28,42 C28,28 40,24 54,24 Z" />
+    
+    <!-- Inner Shield Accent -->
+    <path
+        android:fillColor="#1E88E5"
+        android:pathData="M54,27 C65,27 76,30 76,42 C76,60 54,79 54,79 C54,79 32,60 32,42 C32,30 43,27 54,27 Z" />
+
+    <!-- Central Bridge / Gateway Nodes & Transfer Arrows in Gold & White -->
+    <!-- Horizontal Bridge Beam -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M40,51 L68,51 L68,55 L40,55 Z" />
+    
+    <!-- Left Incoming Node (Mobile Wallet) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,43 L48,43 L48,59 L40,59 Z" />
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M43,45 L45,45 L45,57 L43,57 Z" />
+
+    <!-- Right Server / Bank Destination Node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M60,43 L68,43 L68,59 L60,59 Z" />
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M63,45 L65,45 L65,57 L63,57 Z" />
+
+    <!-- Fast Incoming Arrow (from left to right) -->
+    <path
+        android:fillColor="#FFC107"
+        android:pathData="M51,46 L58,53 L51,60 L49,58 L54,53 L49,48 Z" />
+
+    <!-- Top Security Lock/Check Keyhole -->
+    <path
+        android:fillColor="#81C784"
+        android:pathData="M54,34 C56.2,34 58,35.8 58,38 C58,39.5 57.2,40.7 56,41.4 L56,45 L52,45 L52,41.4 C50.8,40.7 50,39.5 50,38 C50,35.8 51.8,34 54,34 Z" />
+</vector>

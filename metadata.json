@@ -1,0 +1,6 @@
+{
+  "name": "AlMallah Payment Bridge",
+  "description": "Private merchant payment bridge for AlMallah to securely capture, normalize, and reconcile incoming Vodafone Cash and InstaPay / NBE notifications with elmallah-admin3.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

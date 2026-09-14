@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">AlMallah Payment Bridge</string>
+    <string name="app_name_ar">الملاح - مراقب المدفوعات</string>
+    <string name="app_tagline">الجسر الآمن لمطابقة المدفوعات مع elmallah-admin3</string>
+</resources>
