@@ -3,6 +3,7 @@ package com.elmallah.paymentbridge.ui.settings
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -174,7 +175,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. Operating Mode Switch (Phase 1 vs Phase 2)
+            // 2. Read-Only Operating Mode (Hard-locked to Phase 1 CAPTURE_ONLY)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -189,37 +190,43 @@ fun SettingsScreen(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFF1F5F9),
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Security,
+                                        contentDescription = null,
+                                        tint = NavyPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "تفعيل المزامنة مع السيرفر (المرحلة الثانية)",
+                                    text = "وضع التشغيل: التقاط ومراجعة فقط",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
+                                    fontSize = 15.sp,
                                     color = TextPrimary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = if (bridgeUploadEnabled) "مفعّل: يرسل العمليات المشفرة فوراً للسيرفر" else "معطل (المرحلة الأولى: التقاط ومراجعة محلية فقط)",
+                                    text = "الربط التلقائي بالسيرفر سيتم تفعيله في المرحلة الثانية",
                                     fontSize = 12.sp,
-                                    color = if (bridgeUploadEnabled) EmeraldSuccess else TextMuted
+                                    color = TextSecondary
                                 )
                             }
-                            Switch(
-                                checked = bridgeUploadEnabled,
-                                onCheckedChange = { viewModel.toggleBridgeUpload(it) },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = NavyPrimary
-                                )
-                            )
                         }
                     }
                 }
             }
 
-            // 3. Backend URL Configuration
+            // 3. Backend URL Configuration (Developer / Phase 2 - Dormant)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -232,12 +239,27 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .padding(16.dp)
                     ) {
-                        Text(
-                            text = "عنوان السيرفر (elmallah-admin3 Base URL)",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = TextPrimary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "عنوان السيرفر (elmallah-admin3 Base URL)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFF1F5F9)
+                            ) {
+                                Text(
+                                    text = "المرحلة الثانية / للمطورين",
+                                    fontSize = 10.sp,
+                                    color = TextMuted,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = urlDraft,

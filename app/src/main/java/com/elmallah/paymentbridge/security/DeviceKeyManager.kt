@@ -104,13 +104,15 @@ class DeviceKeyManager(context: Context) {
         }
 
     /**
-     * PHASE 1 MANDATE: Default mode is CAPTURE_ONLY (bridgeUploadEnabled = false).
+     * PHASE 1 MANDATE: Hard-locked to CAPTURE_ONLY (bridgeUploadEnabled = false).
      * When false: incoming payments are parsed, deduplicated, and stored locally in Room.
-     * No network upload or retries are dispatched.
+     * No network upload or retries are dispatched. User cannot toggle this in Phase 1.
      */
     var bridgeUploadEnabled: Boolean
-        get() = prefs.getBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, value).apply()
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) {
+            // Hard-locked in Phase 1: no upload allowed
+        }
 
     /**
      * Raw diagnostic message capture is OFF by default.

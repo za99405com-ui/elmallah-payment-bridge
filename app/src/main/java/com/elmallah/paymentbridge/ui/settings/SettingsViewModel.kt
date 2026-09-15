@@ -17,7 +17,7 @@ class SettingsViewModel(
     val deviceId = keyManager.deviceId
 
     val apiBaseUrlInput = MutableStateFlow(keyManager.apiBaseUrl)
-    val bridgeUploadEnabled = MutableStateFlow(keyManager.bridgeUploadEnabled)
+    val bridgeUploadEnabled: StateFlow<Boolean> = MutableStateFlow(false)
     val rawDiagnosticsEnabled = MutableStateFlow(keyManager.rawDiagnosticsEnabled)
 
     val healthCheckStatus = MutableStateFlow<String?>(null)
@@ -31,11 +31,6 @@ class SettingsViewModel(
         } catch (e: Exception) {
             false
         }
-    }
-
-    fun toggleBridgeUpload(enabled: Boolean) {
-        keyManager.bridgeUploadEnabled = enabled
-        bridgeUploadEnabled.value = enabled
     }
 
     fun toggleRawDiagnostics(enabled: Boolean) {

@@ -1,6 +1,7 @@
 package com.elmallah.paymentbridge.capture
 
 import android.app.Notification
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -44,16 +45,55 @@ class PaymentNotificationListener : NotificationListenerService() {
         val sourcePackage = sbn.packageName ?: return
         val extras = sbn.notification?.extras ?: return
 
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
+
+        // STRICT SECURITY REQUIREMENT:
+        // Package and sender validation MUST happen first.
+        // If the package or sender is untrusted, immediately ignore without extracting or processing body.
+        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title)
+        if (sourceValidation is SourceValidationResult.Rejected) {
+            return
+        }
+
+        // Only AFTER package + sender validation passes:
+        // Robust extraction supporting standard, big text, inbox lines, and messaging style:
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+
+        // Safely extract EXTRA_TEXT_LINES (InboxStyle on Samsung/Google Messages)
+        val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            ?.filterNotNull()
+            ?.map { it.toString().trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.joinToString("\n")
+
+        // Safely extract EXTRA_MESSAGES (MessagingStyle on Google Messages/Samsung Messages)
+        val messagingStyleText = try {
+            @Suppress("DEPRECATION")
+            extras.getParcelableArray(Notification.EXTRA_MESSAGES)?.mapNotNull { item ->
+                if (item is Bundle) {
+                    item.getCharSequence("text")?.toString()?.trim()
+                } else null
+            }?.filter { it.isNotEmpty() }?.joinToString("\n")
+        } catch (_: Exception) {
+            null
+        }
+
+        // Resolve richest available notification body text:
+        // Prefer explicit BigText, fallback to MessagingStyle, then InboxStyle text lines, then standard text
+        val resolvedBigText = when {
+            !bigText.isNullOrBlank() -> bigText
+            !messagingStyleText.isNullOrBlank() -> messagingStyleText
+            !textLines.isNullOrBlank() -> textLines
+            else -> null
+        }
 
         val rawMessage = RawNotificationMessage(
             sourcePackage = sourcePackage,
             title = title,
             text = text,
-            bigText = bigText,
+            bigText = resolvedBigText,
             subText = subText,
             postedAtMillis = sbn.postTime
         )
