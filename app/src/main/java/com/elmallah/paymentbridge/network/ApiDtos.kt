@@ -39,8 +39,6 @@ data class HeartbeatRequest(
     @Json(name = "internetConnected") val internetConnected: Boolean,
     @Json(name = "appRunning") val appRunning: Boolean = true,
     @Json(name = "notificationListenerEnabled") val notificationListenerEnabled: Boolean,
-    @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean,
-    @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean,
     @Json(name = "appVersion") val appVersion: String
 )
 
@@ -53,6 +51,22 @@ data class HeartbeatResponse(
     @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean,
     @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean,
     @Json(name = "serverTime") val serverTime: Long
+)
+
+@JsonClass(generateAdapter = true)
+data class DeviceProviderConfigRequest(
+    @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean? = null,
+    @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class DeviceProviderConfigResponse(
+    @Json(name = "status") val status: String,
+    @Json(name = "deviceId") val deviceId: String,
+    @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean,
+    @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean,
+    @Json(name = "busy") val busy: Boolean,
+    @Json(name = "busySessionId") val busySessionId: String? = null
 )
 
 @JsonClass(generateAdapter = true)
