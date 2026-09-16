@@ -44,8 +44,6 @@ class BridgeHeartbeatLoop(
             internetConnected = isInternetConnected(),
             appRunning = true,
             notificationListenerEnabled = listenerEnabled,
-            vfCashEnabled = keyManager.vfCashEnabled,
-            bankAlAhlyEnabled = keyManager.bankAlAhlyEnabled,
             appVersion = BuildConfig.VERSION_NAME
         )
 
@@ -56,6 +54,10 @@ class BridgeHeartbeatLoop(
                 keyManager.lastHeartbeatTimestamp = System.currentTimeMillis()
                 keyManager.serverBusy = body.busy
                 keyManager.busySessionId = body.busySessionId
+
+                // admin3 is the source of truth for per-device payment providers.
+                keyManager.vfCashEnabled = body.vfCashEnabled
+                keyManager.bankAlAhlyEnabled = body.bankAlAhlyEnabled
                 true
             } else {
                 Log.w(TAG, "Heartbeat rejected: HTTP ${response.code()}")
