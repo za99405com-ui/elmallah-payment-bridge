@@ -10,6 +10,8 @@ import com.elmallah.paymentbridge.data.RecordResult
 import com.elmallah.paymentbridge.domain.RawNotificationMessage
 import com.elmallah.paymentbridge.parser.CompositePaymentParser
 import com.elmallah.paymentbridge.parser.PaymentParseResult
+import com.elmallah.paymentbridge.sync.BridgeHeartbeatLoop
+import com.elmallah.paymentbridge.sync.BridgeSyncCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +22,7 @@ class PaymentNotificationListener : NotificationListenerService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val parser = CompositePaymentParser()
+    private var heartbeatLoop: BridgeHeartbeatLoop? = null
 
     companion object {
         private const val TAG = "PaymentBridgeListener"
@@ -31,12 +34,34 @@ class PaymentNotificationListener : NotificationListenerService() {
         super.onListenerConnected()
         isConnected = true
         Log.i(TAG, "Notification listener connected successfully.")
+
+        val app = application as? AlMallahBridgeApp ?: return
+        heartbeatLoop = BridgeHeartbeatLoop(
+            context = applicationContext,
+            scope = serviceScope,
+            keyManager = app.apiProvider.keyManager,
+            apiProvider = app.apiProvider
+        ).also { loop ->
+            loop.start { isConnected }
+        }
+
+        // Flush any locally queued events as soon as the listener becomes active.
+        BridgeSyncCoordinator.enqueueImmediate(applicationContext)
     }
 
     override fun onListenerDisconnected() {
-        super.onListenerDisconnected()
         isConnected = false
         Log.w(TAG, "Notification listener disconnected.")
+
+        val loop = heartbeatLoop
+        if (loop != null) {
+            serviceScope.launch {
+                // Best effort: explicitly report listener=false before stopping.
+                loop.sendOnce(listenerEnabled = false)
+                loop.stop()
+            }
+        }
+        super.onListenerDisconnected()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -44,44 +69,31 @@ class PaymentNotificationListener : NotificationListenerService() {
 
         val sourcePackage = sbn.packageName ?: return
         val extras = sbn.notification?.extras ?: return
-
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
 
-        // STRICT SECURITY REQUIREMENT:
-        // Package and sender validation MUST happen first.
-        // If the package or sender is untrusted, immediately ignore without extracting or processing body.
+        // Package + sender validation MUST happen before reading the body.
         val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title)
-        if (sourceValidation is SourceValidationResult.Rejected) {
-            return
-        }
+        if (sourceValidation is SourceValidationResult.Rejected) return
 
-        // Only AFTER package + sender validation passes:
-        // Robust extraction supporting standard, big text, inbox lines, and messaging style:
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
 
-        // Safely extract EXTRA_TEXT_LINES (InboxStyle on Samsung/Google Messages)
         val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
             ?.filterNotNull()
             ?.map { it.toString().trim() }
             ?.filter { it.isNotEmpty() }
             ?.joinToString("\n")
 
-        // Safely extract EXTRA_MESSAGES (MessagingStyle on Google Messages/Samsung Messages)
         val messagingStyleText = try {
             @Suppress("DEPRECATION")
             extras.getParcelableArray(Notification.EXTRA_MESSAGES)?.mapNotNull { item ->
-                if (item is Bundle) {
-                    item.getCharSequence("text")?.toString()?.trim()
-                } else null
+                if (item is Bundle) item.getCharSequence("text")?.toString()?.trim() else null
             }?.filter { it.isNotEmpty() }?.joinToString("\n")
         } catch (_: Exception) {
             null
         }
 
-        // Resolve richest available notification body text:
-        // Prefer explicit BigText, fallback to MessagingStyle, then InboxStyle text lines, then standard text
         val resolvedBigText = when {
             !bigText.isNullOrBlank() -> bigText
             !messagingStyleText.isNullOrBlank() -> messagingStyleText
@@ -98,10 +110,7 @@ class PaymentNotificationListener : NotificationListenerService() {
             postedAtMillis = sbn.postTime
         )
 
-        // Asynchronously process incoming message with strict security validation
-        serviceScope.launch {
-            processNotification(rawMessage)
-        }
+        serviceScope.launch { processNotification(rawMessage) }
     }
 
     private suspend fun processNotification(rawMessage: RawNotificationMessage) {
@@ -109,11 +118,8 @@ class PaymentNotificationListener : NotificationListenerService() {
         val repository = app.repository
         val keyManager = app.apiProvider.keyManager
 
-        // 1. Strict Live Validation:
-        // Rejects non-trusted messaging packages and unapproved sender titles.
         when (val parseResult = parser.parseLiveMessage(rawMessage, keyManager.deviceId)) {
             is PaymentParseResult.Ignored -> {
-                // Ignore without logging sensitive details
                 Log.d(TAG, "Notification ignored by policy: ${parseResult.reason}")
             }
             is PaymentParseResult.Failed -> {
@@ -121,18 +127,22 @@ class PaymentNotificationListener : NotificationListenerService() {
             }
             is PaymentParseResult.Success -> {
                 val event = parseResult.event
-                // Sanitized log: strictly never log payer phone, reference, or raw SMS
-                Log.i(TAG, "Payment receipt parsed successfully. Provider: ${event.provider}, AmountMinor: ${event.amountMinor}, Channel: ${event.paymentChannel}")
+                Log.i(
+                    TAG,
+                    "Payment receipt parsed. Provider=${event.provider}, AmountMinor=${event.amountMinor}, Channel=${event.paymentChannel}"
+                )
 
                 val rawSnippetToSave = if (keyManager.rawDiagnosticsEnabled) rawMessage.fullText else null
                 when (val recordResult = repository.recordPaymentEvent(event, rawSnippetToSave)) {
                     is RecordResult.Success -> {
-                        Log.i(TAG, "Payment event stored locally. Mode: ${if (keyManager.bridgeUploadEnabled) "BRIDGE_UPLOAD" else "CAPTURE_ONLY"}")
-                        // In Phase 1 (CAPTURE_ONLY mode, bridgeUploadEnabled == false), STOP HERE!
-                        // Do not upload and do not retry against non-existent endpoints.
+                        Log.i(TAG, "Payment event stored locally. UploadEnabled=${keyManager.bridgeUploadEnabled}")
+                        if (keyManager.bridgeUploadEnabled) {
+                            // The app reports the event; admin3 remains authoritative for matching/payment confirmation.
+                            BridgeSyncCoordinator.enqueueImmediate(applicationContext)
+                        }
                     }
                     is RecordResult.Duplicate -> {
-                        Log.w(TAG, "Duplicate payment event detected locally. Skipped duplicate insertion.")
+                        Log.w(TAG, "Duplicate payment event detected locally; upload skipped.")
                     }
                     is RecordResult.Failure -> {
                         Log.e(TAG, "Failed to persist payment event into Room database.")
@@ -143,7 +153,10 @@ class PaymentNotificationListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        heartbeatLoop?.stop()
+        heartbeatLoop = null
+        isConnected = false
         serviceScope.cancel()
+        super.onDestroy()
     }
 }
