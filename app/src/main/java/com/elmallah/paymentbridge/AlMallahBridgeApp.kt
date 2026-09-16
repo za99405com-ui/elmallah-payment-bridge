@@ -5,6 +5,7 @@ import com.elmallah.paymentbridge.data.PaymentDatabase
 import com.elmallah.paymentbridge.data.PaymentRepository
 import com.elmallah.paymentbridge.network.ApiClientProvider
 import com.elmallah.paymentbridge.security.DeviceKeyManager
+import com.elmallah.paymentbridge.sync.BridgeSyncCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,12 +32,15 @@ class AlMallahBridgeApp : Application() {
         repository = PaymentRepository(database.paymentEventDao(), keyManager)
         apiProvider = ApiClientProvider(keyManager)
 
-        // Privacy maintenance: purge raw diagnostic snippets older than 7 days
+        // Phase 2: retry unsent bridge events whenever network becomes available.
+        BridgeSyncCoordinator.ensurePeriodicRetry(this)
+
+        // Privacy maintenance: purge raw diagnostic snippets older than 7 days.
         applicationScope.launch {
             try {
                 repository.purgeOldSnippets(olderThanDays = 7)
             } catch (_: Exception) {
-                // Ignore transient database maintenance issues
+                // Ignore transient database maintenance issues.
             }
         }
     }
