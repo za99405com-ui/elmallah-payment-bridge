@@ -20,6 +20,11 @@ class DeviceKeyManager(context: Context) {
         private const val KEY_BRIDGE_UPLOAD_ENABLED = "bridge_upload_enabled"
         private const val KEY_RAW_DIAGNOSTICS = "raw_diagnostics_enabled"
         private const val KEY_LAST_SYNC_TIME = "last_sync_timestamp"
+        private const val KEY_VF_CASH_ENABLED = "vf_cash_enabled"
+        private const val KEY_BANK_ALAHLY_ENABLED = "bank_alahly_enabled"
+        private const val KEY_LAST_HEARTBEAT_TIME = "last_heartbeat_timestamp"
+        private const val KEY_SERVER_BUSY = "server_busy"
+        private const val KEY_BUSY_SESSION_ID = "busy_session_id"
 
         const val DEFAULT_API_BASE_URL = "https://elmallah-admin3.example.com"
     }
@@ -29,9 +34,7 @@ class DeviceKeyManager(context: Context) {
         ensureDeviceSecret()
     }
 
-    /**
-     * Non-secret persistent unique identifier for this Android merchant phone.
-     */
+    /** Non-secret persistent unique identifier for this merchant Android phone. */
     val deviceId: String
         get() = prefs.getString(KEY_DEVICE_ID, null) ?: ensureDeviceId()
 
@@ -44,8 +47,8 @@ class DeviceKeyManager(context: Context) {
     }
 
     /**
-     * Retrieves the provisioned financial HMAC device secret.
-     * Decrypted on-the-fly using hardware-backed Android Keystore master key.
+     * Retrieves the HMAC secret provisioned from elmallah-admin3.
+     * The secret is encrypted at rest with Android Keystore AES-GCM.
      */
     fun getDeviceSecret(): String {
         val cipher = prefs.getString(KEY_SECRET_CIPHER, null)
@@ -53,18 +56,16 @@ class DeviceKeyManager(context: Context) {
 
         if (!cipher.isNullOrBlank() && !iv.isNullOrBlank()) {
             val decrypted = AndroidKeystoreHelper.decrypt(cipher, iv)
-            if (!decrypted.isNullOrBlank()) {
-                return decrypted
-            }
+            if (!decrypted.isNullOrBlank()) return decrypted
         }
         return ensureDeviceSecret()
     }
 
-    /**
-     * Securely provisions a new HMAC device secret, encrypting it with Android Keystore AES-GCM.
-     */
+    /** Provision/rotate the HMAC key issued by admin3. */
     fun setDeviceSecret(secret: String): Boolean {
-        val encrypted = AndroidKeystoreHelper.encrypt(secret.trim()) ?: return false
+        val clean = secret.trim()
+        if (clean.length < 32) return false
+        val encrypted = AndroidKeystoreHelper.encrypt(clean) ?: return false
         prefs.edit()
             .putString(KEY_SECRET_CIPHER, encrypted.first)
             .putString(KEY_SECRET_IV, encrypted.second)
@@ -73,7 +74,9 @@ class DeviceKeyManager(context: Context) {
     }
 
     private fun ensureDeviceSecret(): String {
-        // Generate cryptographically secure random 256-bit secret if not present
+        // Bootstrap-only random secret. It cannot authenticate until the same device
+        // is registered in admin3. Production setup should replace it with the
+        // one-time provisioning secret issued by the admin dashboard.
         val randomBytes = ByteArray(32)
         SecureRandom().nextBytes(randomBytes)
         val generated = randomBytes.joinToString("") { "%02x".format(it) }
@@ -87,36 +90,31 @@ class DeviceKeyManager(context: Context) {
         return generated
     }
 
-    /**
-     * Base URL for the elmallah-admin3 backend.
-     * Strict requirement: Must use HTTPS in production.
-     */
+    /** Base URL for the elmallah-admin3 backend. HTTPS is mandatory in release. */
     var apiBaseUrl: String
         get() = prefs.getString(KEY_API_BASE_URL, DEFAULT_API_BASE_URL) ?: DEFAULT_API_BASE_URL
         set(value) {
-            val clean = value.trim()
-            if (!clean.startsWith("https://", ignoreCase = true)) {
-                if (!BuildConfig.DEBUG) {
-                    throw IllegalArgumentException("Production API Base URL must use HTTPS strictly.")
-                }
+            val clean = value.trim().trimEnd('/')
+            if (!clean.startsWith("https://", ignoreCase = true) && !BuildConfig.DEBUG) {
+                throw IllegalArgumentException("Production API Base URL must use HTTPS strictly.")
             }
             prefs.edit().putString(KEY_API_BASE_URL, clean).apply()
         }
 
-    /**
-     * PHASE 1 MANDATE: Hard-locked to CAPTURE_ONLY (bridgeUploadEnabled = false).
-     * When false: incoming payments are parsed, deduplicated, and stored locally in Room.
-     * No network upload or retries are dispatched. User cannot toggle this in Phase 1.
-     */
+    /** Phase 2 upload switch. Enabled after device provisioning/configuration. */
     var bridgeUploadEnabled: Boolean
-        get() = false
-        set(@Suppress("UNUSED_PARAMETER") value) {
-            // Hard-locked in Phase 1: no upload allowed
-        }
+        get() = prefs.getBoolean(KEY_BRIDGE_UPLOAD_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, value).apply()
 
-    /**
-     * Raw diagnostic message capture is OFF by default.
-     */
+    /** Per-device provider toggles reported to and persisted by admin3 heartbeat. */
+    var vfCashEnabled: Boolean
+        get() = prefs.getBoolean(KEY_VF_CASH_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_VF_CASH_ENABLED, value).apply()
+
+    var bankAlAhlyEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BANK_ALAHLY_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_BANK_ALAHLY_ENABLED, value).apply()
+
     var rawDiagnosticsEnabled: Boolean
         get() = prefs.getBoolean(KEY_RAW_DIAGNOSTICS, false)
         set(value) = prefs.edit().putBoolean(KEY_RAW_DIAGNOSTICS, value).apply()
@@ -124,4 +122,16 @@ class DeviceKeyManager(context: Context) {
     var lastSyncTimestamp: Long
         get() = prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_SYNC_TIME, value).apply()
+
+    var lastHeartbeatTimestamp: Long
+        get() = prefs.getLong(KEY_LAST_HEARTBEAT_TIME, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_HEARTBEAT_TIME, value).apply()
+
+    var serverBusy: Boolean
+        get() = prefs.getBoolean(KEY_SERVER_BUSY, false)
+        set(value) = prefs.edit().putBoolean(KEY_SERVER_BUSY, value).apply()
+
+    var busySessionId: String?
+        get() = prefs.getString(KEY_BUSY_SESSION_ID, null)
+        set(value) = prefs.edit().putString(KEY_BUSY_SESSION_ID, value).apply()
 }
