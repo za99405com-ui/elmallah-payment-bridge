@@ -56,7 +56,11 @@ class SettingsViewModel(
     fun provisionSecret(secret: String): Boolean {
         val success = keyManager.setDeviceSecret(secret)
         provisioningStatus.value = if (success) {
-            "تم حفظ مفتاح HMAC داخل Android Keystore. يمكن الآن التحقق من الاتصال بالسيرفر."
+            // A newly installed bridge should not send network traffic until the
+            // admin3-issued key exists. Successful provisioning activates Phase 2.
+            keyManager.bridgeUploadEnabled = true
+            bridgeUploadEnabled.value = true
+            "تم حفظ مفتاح HMAC داخل Android Keystore وتفعيل الربط مع السيرفر."
         } else {
             "مفتاح التهيئة غير صالح. يجب أن يكون 32 حرفاً على الأقل."
         }
