@@ -17,6 +17,11 @@ interface PaymentBridgeApi {
         @Body request: HeartbeatRequest
     ): Response<HeartbeatResponse>
 
+    @POST("api/payment-bridge/config")
+    suspend fun updateProviderConfig(
+        @Body request: DeviceProviderConfigRequest
+    ): Response<DeviceProviderConfigResponse>
+
     @GET("api/payment-bridge/health")
     suspend fun checkHealth(): Response<HealthCheckResponse>
 }
