@@ -5,9 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.elmallah.paymentbridge.data.PaymentRepository
 import com.elmallah.paymentbridge.network.ApiClientProvider
 import com.elmallah.paymentbridge.security.DeviceKeyManager
-import com.elmallah.paymentbridge.sync.BridgeSyncCoordinator
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
@@ -18,7 +16,7 @@ class SettingsViewModel(
     val deviceId = keyManager.deviceId
 
     val apiBaseUrlInput = MutableStateFlow(keyManager.apiBaseUrl)
-    val bridgeUploadEnabled: StateFlow<Boolean> = MutableStateFlow(keyManager.bridgeUploadEnabled)
+    val bridgeUploadEnabled = MutableStateFlow(keyManager.bridgeUploadEnabled)
     val vfCashEnabled = MutableStateFlow(keyManager.vfCashEnabled)
     val bankAlAhlyEnabled = MutableStateFlow(keyManager.bankAlAhlyEnabled)
     val rawDiagnosticsEnabled = MutableStateFlow(keyManager.rawDiagnosticsEnabled)
@@ -42,10 +40,7 @@ class SettingsViewModel(
 
     fun setBridgeUploadEnabled(enabled: Boolean) {
         keyManager.bridgeUploadEnabled = enabled
-        (bridgeUploadEnabled as MutableStateFlow).value = enabled
-        if (enabled) {
-            BridgeSyncCoordinator.enqueueImmediate(AppContextHolder.context ?: return)
-        }
+        bridgeUploadEnabled.value = enabled
     }
 
     fun setVfCashEnabled(enabled: Boolean) {
@@ -101,14 +96,5 @@ class SettingsViewModel(
                 healthCheckStatus.value = "خطأ في الاتصال: ${e.localizedMessage ?: e.message}"
             }
         }
-    }
-
-    /**
-     * Tiny holder populated by SettingsScreen so WorkManager can be triggered after
-     * enabling uploads without storing an Activity reference in the ViewModel.
-     */
-    object AppContextHolder {
-        @Volatile
-        var context: android.content.Context? = null
     }
 }
