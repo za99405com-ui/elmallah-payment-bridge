@@ -7,6 +7,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.elmallah.paymentbridge.AlMallahBridgeApp
 import com.elmallah.paymentbridge.data.RecordResult
+import com.elmallah.paymentbridge.domain.PaymentProvider
 import com.elmallah.paymentbridge.domain.RawNotificationMessage
 import com.elmallah.paymentbridge.parser.CompositePaymentParser
 import com.elmallah.paymentbridge.parser.PaymentParseResult
@@ -41,11 +42,8 @@ class PaymentNotificationListener : NotificationListenerService() {
             scope = serviceScope,
             keyManager = app.apiProvider.keyManager,
             apiProvider = app.apiProvider
-        ).also { loop ->
-            loop.start { isConnected }
-        }
+        ).also { loop -> loop.start { isConnected } }
 
-        // Flush any locally queued events as soon as the listener becomes active.
         BridgeSyncCoordinator.enqueueImmediate(applicationContext)
     }
 
@@ -56,7 +54,6 @@ class PaymentNotificationListener : NotificationListenerService() {
         val loop = heartbeatLoop
         if (loop != null) {
             serviceScope.launch {
-                // Best effort: explicitly report listener=false before stopping.
                 loop.sendOnce(listenerEnabled = false)
                 loop.stop()
             }
@@ -71,7 +68,6 @@ class PaymentNotificationListener : NotificationListenerService() {
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
 
-        // Package + sender validation MUST happen before reading the body.
         val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title)
         if (sourceValidation is SourceValidationResult.Rejected) return
 
@@ -119,34 +115,36 @@ class PaymentNotificationListener : NotificationListenerService() {
         val keyManager = app.apiProvider.keyManager
 
         when (val parseResult = parser.parseLiveMessage(rawMessage, keyManager.deviceId)) {
-            is PaymentParseResult.Ignored -> {
-                Log.d(TAG, "Notification ignored by policy: ${parseResult.reason}")
-            }
-            is PaymentParseResult.Failed -> {
-                Log.d(TAG, "Notification did not match financial receipt pattern: ${parseResult.reason}")
-            }
+            is PaymentParseResult.Ignored -> Log.d(TAG, "Notification ignored by policy: ${parseResult.reason}")
+            is PaymentParseResult.Failed -> Log.d(TAG, "Notification did not match financial receipt pattern: ${parseResult.reason}")
             is PaymentParseResult.Success -> {
                 val event = parseResult.event
+
+                val providerEnabled = when (event.provider) {
+                    PaymentProvider.VODAFONE_CASH -> keyManager.vfCashEnabled
+                    PaymentProvider.NBE_INCOMING_TRANSFER -> keyManager.bankAlAhlyEnabled
+                    else -> false
+                }
+                if (!providerEnabled) {
+                    Log.i(TAG, "Payment notification ignored because provider is disabled for this device.")
+                    return
+                }
+
                 Log.i(
                     TAG,
                     "Payment receipt parsed. Provider=${event.provider}, AmountMinor=${event.amountMinor}, Channel=${event.paymentChannel}"
                 )
 
                 val rawSnippetToSave = if (keyManager.rawDiagnosticsEnabled) rawMessage.fullText else null
-                when (val recordResult = repository.recordPaymentEvent(event, rawSnippetToSave)) {
+                when (repository.recordPaymentEvent(event, rawSnippetToSave)) {
                     is RecordResult.Success -> {
                         Log.i(TAG, "Payment event stored locally. UploadEnabled=${keyManager.bridgeUploadEnabled}")
                         if (keyManager.bridgeUploadEnabled) {
-                            // The app reports the event; admin3 remains authoritative for matching/payment confirmation.
                             BridgeSyncCoordinator.enqueueImmediate(applicationContext)
                         }
                     }
-                    is RecordResult.Duplicate -> {
-                        Log.w(TAG, "Duplicate payment event detected locally; upload skipped.")
-                    }
-                    is RecordResult.Failure -> {
-                        Log.e(TAG, "Failed to persist payment event into Room database.")
-                    }
+                    is RecordResult.Duplicate -> Log.w(TAG, "Duplicate payment event detected locally; upload skipped.")
+                    is RecordResult.Failure -> Log.e(TAG, "Failed to persist payment event into Room database.")
                 }
             }
         }
