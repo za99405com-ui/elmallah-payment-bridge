@@ -34,7 +34,6 @@ class DeviceKeyManager(context: Context) {
         ensureDeviceSecret()
     }
 
-    /** Non-secret persistent unique identifier for this merchant Android phone. */
     val deviceId: String
         get() = prefs.getString(KEY_DEVICE_ID, null) ?: ensureDeviceId()
 
@@ -46,10 +45,6 @@ class DeviceKeyManager(context: Context) {
         return newId
     }
 
-    /**
-     * Retrieves the HMAC secret provisioned from elmallah-admin3.
-     * The secret is encrypted at rest with Android Keystore AES-GCM.
-     */
     fun getDeviceSecret(): String {
         val cipher = prefs.getString(KEY_SECRET_CIPHER, null)
         val iv = prefs.getString(KEY_SECRET_IV, null)
@@ -75,8 +70,8 @@ class DeviceKeyManager(context: Context) {
 
     private fun ensureDeviceSecret(): String {
         // Bootstrap-only random secret. It cannot authenticate until the same device
-        // is registered in admin3. Production setup should replace it with the
-        // one-time provisioning secret issued by the admin dashboard.
+        // is registered in admin3. Production setup replaces it with the one-time
+        // provisioning secret issued by the admin dashboard.
         val randomBytes = ByteArray(32)
         SecureRandom().nextBytes(randomBytes)
         val generated = randomBytes.joinToString("") { "%02x".format(it) }
@@ -90,7 +85,6 @@ class DeviceKeyManager(context: Context) {
         return generated
     }
 
-    /** Base URL for the elmallah-admin3 backend. HTTPS is mandatory in release. */
     var apiBaseUrl: String
         get() = prefs.getString(KEY_API_BASE_URL, DEFAULT_API_BASE_URL) ?: DEFAULT_API_BASE_URL
         set(value) {
@@ -101,12 +95,14 @@ class DeviceKeyManager(context: Context) {
             prefs.edit().putString(KEY_API_BASE_URL, clean).apply()
         }
 
-    /** Phase 2 upload switch. Enabled after device provisioning/configuration. */
+    /**
+     * Phase 2 upload remains off on a fresh install until the admin3-issued HMAC
+     * key is provisioned. SettingsViewModel enables it after successful provisioning.
+     */
     var bridgeUploadEnabled: Boolean
-        get() = prefs.getBoolean(KEY_BRIDGE_UPLOAD_ENABLED, true)
+        get() = prefs.getBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, value).apply()
 
-    /** Per-device provider toggles reported to and persisted by admin3 heartbeat. */
     var vfCashEnabled: Boolean
         get() = prefs.getBoolean(KEY_VF_CASH_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_VF_CASH_ENABLED, value).apply()
