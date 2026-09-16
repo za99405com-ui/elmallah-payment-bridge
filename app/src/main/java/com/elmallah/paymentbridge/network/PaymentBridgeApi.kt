@@ -12,6 +12,11 @@ interface PaymentBridgeApi {
         @Body request: PaymentEventUploadRequest
     ): Response<PaymentEventUploadResponse>
 
+    @POST("api/payment-bridge/heartbeat")
+    suspend fun sendHeartbeat(
+        @Body request: HeartbeatRequest
+    ): Response<HeartbeatResponse>
+
     @GET("api/payment-bridge/health")
     suspend fun checkHealth(): Response<HealthCheckResponse>
 }
