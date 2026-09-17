@@ -21,10 +21,13 @@ data class PresetSample(
 
 class ParserTestViewModel(
     private val repository: PaymentRepository,
-    private val keyManager: DeviceKeyManager
+    private val keyManager: DeviceKeyManager,
+    private val ruleStore: com.elmallah.paymentbridge.domain.PaymentRuleStore? = null
 ) : ViewModel() {
 
-    private val parser = CompositePaymentParser()
+    private val parser = CompositePaymentParser(
+        ruleSupplier = { ruleStore?.getActiveRules() ?: com.elmallah.paymentbridge.domain.PaymentRuleStore.getDefaultRules() }
+    )
 
     val senderTitleInput = MutableStateFlow("VF-Cash")
     val messageTextInput = MutableStateFlow("")

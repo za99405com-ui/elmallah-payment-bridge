@@ -14,6 +14,8 @@ enum class IgnoreReason {
 enum class FailureReason {
     UNKNOWN_MESSAGE_FORMAT,
     MISSING_AMOUNT,
+    AMOUNT_EXTRACTION_FAILED,
+    AMOUNT_INVALID,
     MISSING_REFERENCE,
     INVALID_PAYER_PHONE,
     MALFORMED_DATA
@@ -22,7 +24,7 @@ enum class FailureReason {
 sealed class PaymentParseResult {
     data class Success(
         val event: PaymentBridgeEvent,
-        val detailsExplanation: String
+        val detailsExplanation: String = "تم استخراج بيانات الدفع بنجاح"
     ) : PaymentParseResult()
 
     data class Ignored(

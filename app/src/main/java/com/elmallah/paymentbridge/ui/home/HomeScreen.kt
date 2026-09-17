@@ -2,13 +2,12 @@ package com.elmallah.paymentbridge.ui.home
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,358 +16,811 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.elmallah.paymentbridge.ui.components.EventItemCard
-import com.elmallah.paymentbridge.ui.components.MetricCard
-import com.elmallah.paymentbridge.ui.events.EventDetailSheet
+import com.elmallah.paymentbridge.ui.events.EventCard
 import com.elmallah.paymentbridge.ui.theme.AmberContainer
 import com.elmallah.paymentbridge.ui.theme.AmberWarning
-import com.elmallah.paymentbridge.ui.theme.BankAhlyTeal
 import com.elmallah.paymentbridge.ui.theme.CoralContainer
 import com.elmallah.paymentbridge.ui.theme.CoralError
 import com.elmallah.paymentbridge.ui.theme.EmeraldContainer
 import com.elmallah.paymentbridge.ui.theme.EmeraldSuccess
-import com.elmallah.paymentbridge.ui.theme.NavyPrimary
-import com.elmallah.paymentbridge.ui.theme.NeutralBorder
-import com.elmallah.paymentbridge.ui.theme.TextMuted
-import com.elmallah.paymentbridge.ui.theme.TextPrimary
-import com.elmallah.paymentbridge.ui.theme.TextSecondary
+import java.text.DecimalFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onNavigateToParserTest: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToEvents: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val clipboard = LocalClipboardManager.current
+    val scrollState = rememberScrollState()
 
-    val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsState()
-    val isCaptureOnlyMode by viewModel.isCaptureOnlyMode.collectAsState()
-    val todayMetrics by viewModel.todayMetrics.collectAsState()
-    val selectedFilter by viewModel.selectedFilter.collectAsState()
-    val events by viewModel.filteredEvents.collectAsState()
-    val selectedEvent by viewModel.selectedEventForDetail.collectAsState()
+    val isInternetConnected by viewModel.isInternetConnected.collectAsState()
+    val isBgRunning by viewModel.isBackgroundServiceRunning.collectAsState()
+    val isServerVerified by viewModel.isServerVerified.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+    val syncMessage by viewModel.syncMessage.collectAsState()
+    val setupDismissed by viewModel.setupDismissed.collectAsState()
+    val lastEvent by viewModel.lastEvent.collectAsState()
+    val pendingCount by viewModel.pendingUploadsCount.collectAsState()
+    val failedCount by viewModel.failedUploadsCount.collectAsState()
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val checklist = viewModel.checklistState
+    val deviceStatus = viewModel.deviceStatus
+    val monitoring = viewModel.monitoringState
 
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshNotificationAccess()
+    val amountFormat = DecimalFormat("#,##0.00")
+    val timeFormat = SimpleDateFormat("hh:mm a", Locale("ar"))
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // App Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "جسر المدفوعات",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "جهاز التقاط وتمرير الإشعارات الميدانية",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(
+                onClick = onNavigateToSettings,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "الإعدادات",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "الملاح - مراقب المدفوعات",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "بوابة استلام إشعارات الدفع (تطبيق خاص)",
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToParserTest) {
-                        Icon(
-                            imageVector = Icons.Default.Science,
-                            contentDescription = "اختبار قراءة الرسائل",
-                            tint = Color.White
-                        )
-                    }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "الإعدادات",
-                            tint = Color.White
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = NavyPrimary,
-                    titleContentColor = Color.White
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // 1. Prominent Phase 1 Operating Mode Notice
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isCaptureOnlyMode) Color(0xFFF1F5F9) else EmeraldContainer
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isCaptureOnlyMode) NeutralBorder else EmeraldSuccess.copy(alpha = 0.4f)
-                    )
+        // Sync feedback banner
+        if (!syncMessage.isNullOrBlank()) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    Text(
+                        text = syncMessage ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { viewModel.clearSyncMessage() },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 1. FIRST-RUN SETUP CHECKLIST (Visible if incomplete and not dismissed)
+        if (!checklist.allCompleted && !setupDismissed) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = if (isCaptureOnlyMode) Icons.Default.CloudOff else Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = if (isCaptureOnlyMode) Color(0xFF475569) else EmeraldSuccess,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = if (isCaptureOnlyMode) "وضع التشغيل: التقاط ومراجعة فقط" else "وضع التشغيل: المزامنة السحابية مفعلة",
+                                text = "دليل الإعداد السريع للجهاز",
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = TextPrimary
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (isCaptureOnlyMode) "الربط بالسيرفر غير مفعّل بعد (المرحلة الأولى - أرشفة محلية آمنة)" else "يتم إرسال العمليات المشفرة تلقائياً",
-                                fontSize = 12.sp,
-                                color = TextSecondary
+                                text = "مكتمل ${checklist.completedCount} من 5 متطلبات",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                }
-            }
-
-            // 2. Notification Access Warning if not granted
-            if (!isNotificationAccessGranted) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = AmberContainer),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, AmberWarning.copy(alpha = 0.4f))
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = AmberWarning,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "تنبيه: إذن قراءة الإشعارات غير مفعل",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = AmberWarning
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "يحتاج التطبيق لإذن قراءة الإشعارات لالتقاط رسائل فودافون كاش والبنك الأهلي فور وصولها.",
-                                fontSize = 12.sp,
-                                color = TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Button(
-                                onClick = {
-                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                    context.startActivity(intent)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = AmberWarning),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    text = "تفعيل إذن الإشعارات الآن",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. Metrics Summary Cards
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MetricCard(
-                        title = "حالة الالتقاط",
-                        value = if (isNotificationAccessGranted) "نشط ومفعل" else "متوقف",
-                        subtitle = if (isNotificationAccessGranted) "يلتقط الرسائل المعتمدة" else "يتطلب منح الإذن",
-                        icon = if (isNotificationAccessGranted) Icons.Default.NotificationsActive else Icons.Default.Notifications,
-                        accentColor = if (isNotificationAccessGranted) EmeraldSuccess else CoralError,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MetricCard(
-                        title = "مدفوعات اليوم",
-                        value = "${todayMetrics.eventCount} عملية",
-                        subtitle = "${String.format(Locale.US, "%.2f", todayMetrics.totalAmountMajor)} ج.م",
-                        icon = Icons.Default.Payments,
-                        accentColor = BankAhlyTeal,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            // 4. Filter Chips
-            item {
-                Column {
-                    Text(
-                        text = "سجل الإشعارات الملتقطة",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(EventFilter.values()) { filter ->
-                            FilterChip(
-                                selected = selectedFilter == filter,
-                                onClick = { viewModel.selectFilter(filter) },
-                                label = { Text(filter.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = NavyPrimary,
-                                    selectedLabelColor = Color.White
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 5. Events List or Empty State
-            if (events.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeutralBorder)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(36.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        IconButton(
+                            onClick = { viewModel.dismissSetupCard() },
+                            modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ReceiptLong,
-                                contentDescription = null,
-                                tint = TextMuted,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "لا توجد عمليات ملتقطة حالياً",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "سيتم تسجيل إشعارات التحويل الصالحة فور استلامها من VF-Cash أو Bank-AlAhly",
-                                fontSize = 12.sp,
-                                color = TextMuted
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "إغلاق مؤقت",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
-                }
-            } else {
-                items(events, key = { it.eventId }) { event ->
-                    EventItemCard(
-                        entity = event,
-                        onClick = { viewModel.selectEvent(event) }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = checklist.completedCount / 5f,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Step 1: Notification Access
+                    ChecklistItem(
+                        title = "صلاحية الاستماع للإشعارات (Notification Access)",
+                        isCompleted = checklist.notificationAccessGranted,
+                        actionLabel = if (!checklist.notificationAccessGranted) "تفعيل الصلاحية" else null,
+                        onAction = {
+                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                    )
+
+                    // Step 2: Background Service
+                    ChecklistItem(
+                        title = "تشغيل خدمة المراقبة بالخلفية (Background Service)",
+                        isCompleted = checklist.backgroundServiceRunning,
+                        actionLabel = if (!checklist.backgroundServiceRunning) "بدء التشغيل" else null,
+                        onAction = { viewModel.toggleBackgroundService(true) }
+                    )
+
+                    // Step 3: Server URL
+                    ChecklistItem(
+                        title = "تهيئة عنوان سيرفر admin3 المعتمد",
+                        isCompleted = checklist.serverUrlConfigured,
+                        actionLabel = if (!checklist.serverUrlConfigured) "ضبط العنوان" else null,
+                        onAction = onNavigateToSettings
+                    )
+
+                    // Step 4: Provisioning Secret
+                    ChecklistItem(
+                        title = "تثبيت المفتاح السري الموقّع (HMAC Secret)",
+                        isCompleted = checklist.deviceProvisioned,
+                        actionLabel = if (!checklist.deviceProvisioned) "تثبيت المفتاح" else null,
+                        onAction = onNavigateToSettings
+                    )
+
+                    // Step 5: Server Verification
+                    ChecklistItem(
+                        title = "فحص الاتصال وتأكيد جاهزية السيرفر",
+                        isCompleted = checklist.serverConnectionVerified,
+                        actionLabel = if (!checklist.serverConnectionVerified) "فحص الآن" else null,
+                        onAction = { viewModel.verifyServerConnection() }
                     )
                 }
             }
         }
-    }
 
-    // Modal BottomSheet for Event Details
-    selectedEvent?.let { eventEntity ->
-        ModalBottomSheet(
-            onDismissRequest = { viewModel.selectEvent(null) },
-            sheetState = sheetState
+        // 2. CARD A: DEVICE STATUS
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            EventDetailSheet(entity = eventEntity)
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Primary Status Bar: Online/Offline & Available/Busy
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "حالة الجهاز الميداني",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // Online / Offline Badge
+                        StatusPill(
+                            label = if (isInternetConnected) "متصل بالإنترنت" else "غير متصل",
+                            color = if (isInternetConnected) EmeraldSuccess else CoralError,
+                            bgColor = if (isInternetConnected) EmeraldContainer else CoralContainer
+                        )
+
+                        // Available / Busy Badge
+                        if (deviceStatus.isBusy) {
+                            StatusPill(
+                                label = "مشغول (جلسة #${deviceStatus.busySessionId?.takeLast(4) ?: "..."})",
+                                color = AmberWarning,
+                                bgColor = AmberContainer
+                            )
+                        } else {
+                            StatusPill(
+                                label = "متاح للطلبات",
+                                color = EmeraldSuccess,
+                                bgColor = EmeraldContainer
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Detailed Connection Badges Grid (4 items)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ConnectionBadge(
+                        label = "الإنترنت",
+                        isActive = isInternetConnected,
+                        activeIcon = Icons.Default.Wifi,
+                        inactiveIcon = Icons.Default.WifiOff,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ConnectionBadge(
+                        label = "إشعارات SMS",
+                        isActive = deviceStatus.isListenerConnected,
+                        activeIcon = Icons.Default.NotificationsActive,
+                        inactiveIcon = Icons.Default.NotificationsOff,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ConnectionBadge(
+                        label = "خدمة الخلفية",
+                        isActive = isBgRunning,
+                        activeIcon = Icons.Default.VerifiedUser,
+                        inactiveIcon = Icons.Default.Error,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ConnectionBadge(
+                        label = "سيرفر admin3",
+                        isActive = deviceStatus.isServerConnected,
+                        activeIcon = Icons.Default.CloudDone,
+                        inactiveIcon = Icons.Default.CloudOff,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Device ID info row with copy
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "معرف الجهاز (Device ID)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = deviceStatus.deviceId,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        IconButton(
+                            onClick = { clipboard.setText(AnnotatedString(deviceStatus.deviceId)) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "نسخ المعرف",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Heartbeat & Server URL row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (deviceStatus.lastHeartbeatTimestamp > 0)
+                            "آخر نبضة قلب: ${timeFormat.format(Date(deviceStatus.lastHeartbeatTimestamp))}"
+                        else "لم يتم إرسال نبضة بعد",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Text(
+                        text = deviceStatus.serverBaseUrl.removePrefix("https://").take(24) + "...",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // 3. CARD B: PAYMENT MONITORING
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "مراقبة المعاملات المالية",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (monitoring.isMonitoringActive) "المراقبة الميدانية نشطة وتعمل بالخلفية" else "المراقبة متوقفة (تحتاج تفعيل الصلاحية والخدمة)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (monitoring.isMonitoringActive) EmeraldSuccess else CoralError
+                        )
+                    }
+
+                    // Active Rules Badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = "${monitoring.activeRulesCount} مصادر دفع نشطة",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Queue Metrics Row: Pending vs Failed
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricCounter(
+                        label = "معلق للمزامنة",
+                        count = pendingCount,
+                        color = if (pendingCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricCounter(
+                        label = "فشل / مكرر",
+                        count = failedCount,
+                        color = if (failedCount > 0) CoralError else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Last parsed payment info
+                if (monitoring.lastParsedAmountMinor != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = EmeraldContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "آخر عملية تم التقاطها",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = EmeraldSuccess
+                                )
+                                Text(
+                                    text = "${amountFormat.format(monitoring.lastParsedAmountMinor / 100.0)} ج.م",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = EmeraldSuccess
+                                )
+                            }
+                            if (monitoring.lastParsedTime != null) {
+                                Text(
+                                    text = timeFormat.format(Date(monitoring.lastParsedTime)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = EmeraldSuccess
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Last detected notification snippet
+                if (!monitoring.lastDetectedNotification.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "آخر إشعار مستلم: ${monitoring.lastDetectedNotification}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.triggerImmediateSync() },
+                        enabled = !isSyncing,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("جاري الإرسال...")
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Sync,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("مزامنة فورية")
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = onNavigateToEvents,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("عرض العمليات")
+                    }
+                }
+            }
+        }
+
+        // 4. CARD C: RECENT PAYMENT EVENTS PREVIEW
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "آخر عملية مسجلة",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Text(
+                    text = "عرض الكل",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onNavigateToEvents() }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (lastEvent != null) {
+                EventCard(
+                    event = lastEvent!!,
+                    isExpanded = false,
+                    onToggleExpand = onNavigateToEvents
+                )
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier.padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "لا توجد عمليات دفع مسجلة بعد على هذا الجهاز",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // Fact Capture Disclaimer
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "تطبيق الجسر هو جهاز التقاط وقائع فقط. تأكيد سداد الطلبات يتم حصرياً عبر نظام admin3 المركزي.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusPill(
+    label: String,
+    color: Color,
+    bgColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = bgColor
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConnectionBadge(
+    label: String,
+    isActive: Boolean,
+    activeIcon: ImageVector,
+    inactiveIcon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (isActive) EmeraldContainer else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (isActive) activeIcon else inactiveIcon,
+                contentDescription = null,
+                tint = if (isActive) EmeraldSuccess else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp,
+                    color = if (isActive) EmeraldSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = if (isActive) "نشط" else "متوقف",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isActive) EmeraldSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricCounter(
+    label: String,
+    count: Int,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "$count",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = color
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChecklistItem(
+    title: String,
+    isCompleted: Boolean,
+    actionLabel: String? = null,
+    onAction: () -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.Error,
+                contentDescription = null,
+                tint = if (isCompleted) EmeraldSuccess else AmberWarning,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isCompleted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (actionLabel != null && !isCompleted) {
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .clickable { onAction() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
         }
     }
 }

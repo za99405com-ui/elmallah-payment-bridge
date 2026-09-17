@@ -60,6 +60,15 @@ interface PaymentEventDao {
     @Query("SELECT SUM(amountMinor) FROM payment_events WHERE capturedAt >= :startOfDay AND syncStatus != 'DUPLICATE'")
     fun getTodayTotalAmountMinorFlow(startOfDay: Long): Flow<Long?>
 
+    @Query("SELECT COUNT(*) FROM payment_events WHERE syncStatus IN ('PENDING_UPLOAD', 'FAILED_RETRYABLE')")
+    fun getPendingUploadCountFlow(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM payment_events WHERE syncStatus = 'FAILED_RETRYABLE'")
+    fun getFailedUploadCountFlow(): Flow<Int>
+
+    @Query("SELECT * FROM payment_events ORDER BY capturedAt DESC LIMIT 1")
+    fun getLastEventFlow(): Flow<PaymentEventEntity?>
+
     /**
      * Privacy retention purge:
      * Clears raw diagnostic SMS snippets older than threshold timestamp.

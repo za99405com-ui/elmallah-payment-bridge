@@ -49,6 +49,9 @@ data class PaymentEventEntity(
     val serverMessage: String? = null,
     val acknowledgedAt: Long? = null
 ) {
+    val amountInMajorUnits: Double
+        get() = amountMinor / 100.0
+
     fun toDomain(): PaymentBridgeEvent {
         return PaymentBridgeEvent(
             eventId = eventId,
@@ -67,7 +70,8 @@ data class PaymentEventEntity(
             parserVersion = parserVersion,
             parseConfidence = parseConfidence,
             rawMessageHash = rawMessageHash,
-            deviceId = deviceId
+            deviceId = deviceId,
+            paymentSourceId = provider
         )
     }
 
@@ -86,7 +90,8 @@ data class PaymentEventEntity(
                 currency = event.currency,
                 payerPhone = event.payerPhone,
                 walletPhone = event.walletPhone,
-                transactionReference = event.transactionReference,
+                transactionReference = event.transactionReference?.trim()?.ifEmpty { null }
+                    ?: "REF-${event.rawMessageHash.take(12)}",
                 accountLast4 = event.accountLast4,
                 sourceSender = event.sourceSender,
                 sourcePackage = event.sourcePackage,

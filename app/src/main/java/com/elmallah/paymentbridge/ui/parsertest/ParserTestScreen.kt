@@ -248,7 +248,7 @@ fun ParserTestScreen(
                                     ResultDetailRow("القناة", event.paymentChannel)
                                     ResultDetailRow("المبلغ بالجنيه", "${String.format(Locale.US, "%.2f", event.amountInMajorUnits)} ج.م")
                                     ResultDetailRow("المبلغ بالقروش (Minor)", "${event.amountMinor} قرش")
-                                    ResultDetailRow("الرقم المرجعي للعملية", event.transactionReference)
+                                    ResultDetailRow("الرقم المرجعي للعملية", event.transactionReference ?: "غير متوفر في الإشعار")
                                     if (event.payerPhone != null) ResultDetailRow("هاتف الراسل", event.payerPhone)
                                     if (event.accountLast4 != null) ResultDetailRow("آخر 4 أرقام من الحساب", "****${event.accountLast4}")
                                     if (event.walletPhone != null) ResultDetailRow("محفظة الاستلام", event.walletPhone)

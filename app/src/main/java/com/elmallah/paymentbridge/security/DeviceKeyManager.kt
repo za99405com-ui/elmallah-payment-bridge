@@ -16,6 +16,7 @@ class DeviceKeyManager(context: Context) {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_SECRET_CIPHER = "device_secret_cipher_v2"
         private const val KEY_SECRET_IV = "device_secret_iv_v2"
+        private const val KEY_IS_PROVISIONED = "is_provisioned_v2"
         private const val KEY_API_BASE_URL = "api_base_url"
         private const val KEY_BRIDGE_UPLOAD_ENABLED = "bridge_upload_enabled"
         private const val KEY_RAW_DIAGNOSTICS = "raw_diagnostics_enabled"
@@ -25,8 +26,18 @@ class DeviceKeyManager(context: Context) {
         private const val KEY_LAST_HEARTBEAT_TIME = "last_heartbeat_timestamp"
         private const val KEY_SERVER_BUSY = "server_busy"
         private const val KEY_BUSY_SESSION_ID = "busy_session_id"
+        private const val KEY_APP_THEME = "app_theme_preference"
+        private const val KEY_LAST_SERVER_RESPONSE = "last_server_response_body"
+        private const val KEY_LAST_SERVER_STATUS_CODE = "last_server_status_code"
+        private const val KEY_ACTIVE_RULES_COUNT = "active_rules_count"
+        private const val KEY_LAST_DETECTED_NOTIFICATION = "last_detected_notification"
+        private const val KEY_LAST_PARSED_AMOUNT_MINOR = "last_parsed_amount_minor"
+        private const val KEY_LAST_PARSED_TIME = "last_parsed_time"
 
         const val DEFAULT_API_BASE_URL = "https://elmallah-admin3.example.com"
+        const val THEME_SYSTEM = "SYSTEM"
+        const val THEME_LIGHT = "LIGHT"
+        const val THEME_DARK = "DARK"
     }
 
     init {
@@ -56,7 +67,10 @@ class DeviceKeyManager(context: Context) {
         return ensureDeviceSecret()
     }
 
-    /** Provision/rotate the HMAC key issued by admin3. */
+    /**
+     * Provision or rotate the authoritative HMAC key issued by elmallah-admin3.
+     * Stored securely in Android Keystore. The key is never displayed back to the UI.
+     */
     fun setDeviceSecret(secret: String): Boolean {
         val clean = secret.trim()
         if (clean.length < 32) return false
@@ -64,14 +78,18 @@ class DeviceKeyManager(context: Context) {
         prefs.edit()
             .putString(KEY_SECRET_CIPHER, encrypted.first)
             .putString(KEY_SECRET_IV, encrypted.second)
+            .putBoolean(KEY_IS_PROVISIONED, true)
+            .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, true)
             .apply()
         return true
     }
 
+    var isProvisioned: Boolean
+        get() = prefs.getBoolean(KEY_IS_PROVISIONED, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_PROVISIONED, value).apply()
+
     private fun ensureDeviceSecret(): String {
-        // Bootstrap-only random secret. It cannot authenticate until the same device
-        // is registered in admin3. Production setup replaces it with the one-time
-        // provisioning secret issued by the admin dashboard.
+        // Bootstrap-only fallback random secret.
         val randomBytes = ByteArray(32)
         SecureRandom().nextBytes(randomBytes)
         val generated = randomBytes.joinToString("") { "%02x".format(it) }
@@ -95,10 +113,6 @@ class DeviceKeyManager(context: Context) {
             prefs.edit().putString(KEY_API_BASE_URL, clean).apply()
         }
 
-    /**
-     * Phase 2 upload remains off on a fresh install until the admin3-issued HMAC
-     * key is provisioned. SettingsViewModel enables it after successful provisioning.
-     */
     var bridgeUploadEnabled: Boolean
         get() = prefs.getBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, value).apply()
@@ -130,4 +144,32 @@ class DeviceKeyManager(context: Context) {
     var busySessionId: String?
         get() = prefs.getString(KEY_BUSY_SESSION_ID, null)
         set(value) = prefs.edit().putString(KEY_BUSY_SESSION_ID, value).apply()
+
+    var appTheme: String
+        get() = prefs.getString(KEY_APP_THEME, THEME_SYSTEM) ?: THEME_SYSTEM
+        set(value) = prefs.edit().putString(KEY_APP_THEME, value).apply()
+
+    var lastServerResponse: String?
+        get() = prefs.getString(KEY_LAST_SERVER_RESPONSE, null)
+        set(value) = prefs.edit().putString(KEY_LAST_SERVER_RESPONSE, value).apply()
+
+    var lastServerStatusCode: Int
+        get() = prefs.getInt(KEY_LAST_SERVER_STATUS_CODE, 0)
+        set(value) = prefs.edit().putInt(KEY_LAST_SERVER_STATUS_CODE, value).apply()
+
+    var activeRulesCount: Int
+        get() = prefs.getInt(KEY_ACTIVE_RULES_COUNT, 2)
+        set(value) = prefs.edit().putInt(KEY_ACTIVE_RULES_COUNT, value).apply()
+
+    var lastDetectedNotification: String?
+        get() = prefs.getString(KEY_LAST_DETECTED_NOTIFICATION, null)
+        set(value) = prefs.edit().putString(KEY_LAST_DETECTED_NOTIFICATION, value).apply()
+
+    var lastParsedAmountMinor: Long
+        get() = prefs.getLong(KEY_LAST_PARSED_AMOUNT_MINOR, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_PARSED_AMOUNT_MINOR, value).apply()
+
+    var lastParsedTime: Long
+        get() = prefs.getLong(KEY_LAST_PARSED_TIME, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_PARSED_TIME, value).apply()
 }

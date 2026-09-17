@@ -39,6 +39,12 @@ class PaymentRepository(
         return dao.getTodayTotalAmountMinorFlow(cal.timeInMillis)
     }
 
+    fun getPendingUploadCount(): Flow<Int> = dao.getPendingUploadCountFlow()
+
+    fun getFailedUploadCount(): Flow<Int> = dao.getFailedUploadCountFlow()
+
+    fun getLastEvent(): Flow<PaymentEventEntity?> = dao.getLastEventFlow()
+
     /**
      * Records parsed payment event into local Room database with strict duplicate prevention.
      * Enforces CAPTURE_ONLY mode when upload bridge is disabled.
@@ -48,9 +54,11 @@ class PaymentRepository(
         rawSnippet: String? = null
     ): RecordResult {
         // 1. Check duplicate by provider + transaction reference
-        val existingByRef = dao.findByProviderAndReference(event.provider, event.transactionReference)
-        if (existingByRef != null) {
-            return RecordResult.Duplicate(existingByRef)
+        if (!event.transactionReference.isNullOrBlank()) {
+            val existingByRef = dao.findByProviderAndReference(event.provider, event.transactionReference)
+            if (existingByRef != null) {
+                return RecordResult.Duplicate(existingByRef)
+            }
         }
 
         val existingByFingerprint = dao.findByFingerprint(event.fingerprint)
@@ -77,7 +85,8 @@ class PaymentRepository(
         val insertedId = dao.insert(entity)
         if (insertedId == -1L) {
             // Room conflict abort on unique constraint
-            val existing = dao.findByProviderAndReference(event.provider, event.transactionReference)
+            val existing = (if (!event.transactionReference.isNullOrBlank()) dao.findByProviderAndReference(event.provider, event.transactionReference) else null)
+                ?: dao.findByFingerprint(event.fingerprint)
                 ?: dao.findByEventId(event.eventId)
             return if (existing != null) RecordResult.Duplicate(existing)
             else RecordResult.Failure("فشل إدراج العملية في قاعدة البيانات")

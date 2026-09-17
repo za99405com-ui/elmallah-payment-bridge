@@ -48,6 +48,8 @@ object MessageNormalizer {
         return input.replace('\u00A0', ' ')
             .replace('：', ':')
             .replace('،', ',')
+            .replace('٬', ',')
+            .replace('٫', '.')
     }
 
     /**
@@ -160,4 +162,6 @@ object MessageNormalizer {
         val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
         return hash.joinToString("") { "%02x".format(it) }
     }
+
+    fun sha256Hex(input: String): String = sha256(input)
 }

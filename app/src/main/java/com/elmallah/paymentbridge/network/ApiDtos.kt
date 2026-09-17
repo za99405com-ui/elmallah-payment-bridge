@@ -1,5 +1,6 @@
 package com.elmallah.paymentbridge.network
 
+import com.elmallah.paymentbridge.domain.PaymentSourceRule
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
@@ -21,7 +22,8 @@ data class PaymentEventUploadRequest(
     @Json(name = "parserVersion") val parserVersion: String,
     @Json(name = "parseConfidence") val parseConfidence: String,
     @Json(name = "rawMessageHash") val rawMessageHash: String,
-    @Json(name = "deviceId") val deviceId: String
+    @Json(name = "deviceId") val deviceId: String,
+    @Json(name = "paymentSourceId") val paymentSourceId: String = provider
 )
 
 @JsonClass(generateAdapter = true)
@@ -48,9 +50,17 @@ data class HeartbeatResponse(
     @Json(name = "online") val online: Boolean,
     @Json(name = "busy") val busy: Boolean,
     @Json(name = "busySessionId") val busySessionId: String? = null,
-    @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean,
-    @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean,
-    @Json(name = "serverTime") val serverTime: Long
+    @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean = true,
+    @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean = false,
+    @Json(name = "serverTime") val serverTime: Long,
+    @Json(name = "activeRulesCount") val activeRulesCount: Int? = null,
+    @Json(name = "rules") val rules: List<PaymentSourceRule>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class PaymentRulesResponse(
+    @Json(name = "status") val status: String,
+    @Json(name = "rules") val rules: List<PaymentSourceRule>
 )
 
 @JsonClass(generateAdapter = true)

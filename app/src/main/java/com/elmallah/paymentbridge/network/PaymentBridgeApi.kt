@@ -22,6 +22,9 @@ interface PaymentBridgeApi {
         @Body request: DeviceProviderConfigRequest
     ): Response<DeviceProviderConfigResponse>
 
+    @GET("api/payment-bridge/rules")
+    suspend fun fetchPaymentRules(): Response<PaymentRulesResponse>
+
     @GET("api/payment-bridge/health")
     suspend fun checkHealth(): Response<HealthCheckResponse>
 }

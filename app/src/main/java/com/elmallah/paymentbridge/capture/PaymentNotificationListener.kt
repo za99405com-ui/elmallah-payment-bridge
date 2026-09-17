@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 class PaymentNotificationListener : NotificationListenerService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val parser = CompositePaymentParser()
+    private var parser: CompositePaymentParser? = null
     private var heartbeatLoop: BridgeHeartbeatLoop? = null
 
     companion object {
@@ -37,11 +37,14 @@ class PaymentNotificationListener : NotificationListenerService() {
         Log.i(TAG, "Notification listener connected successfully.")
 
         val app = application as? AlMallahBridgeApp ?: return
+        parser = CompositePaymentParser(ruleSupplier = { app.ruleStore.getActiveRules() })
+
         heartbeatLoop = BridgeHeartbeatLoop(
             context = applicationContext,
             scope = serviceScope,
             keyManager = app.apiProvider.keyManager,
-            apiProvider = app.apiProvider
+            apiProvider = app.apiProvider,
+            ruleStore = app.ruleStore
         ).also { loop -> loop.start { isConnected } }
 
         BridgeSyncCoordinator.enqueueImmediate(applicationContext)
@@ -68,7 +71,10 @@ class PaymentNotificationListener : NotificationListenerService() {
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
 
-        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title)
+        val app = application as? AlMallahBridgeApp
+        val activeRules = app?.ruleStore?.getActiveRules() ?: emptyList()
+
+        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title, activeRules)
         if (sourceValidation is SourceValidationResult.Rejected) return
 
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
@@ -113,26 +119,35 @@ class PaymentNotificationListener : NotificationListenerService() {
         val app = application as? AlMallahBridgeApp ?: return
         val repository = app.repository
         val keyManager = app.apiProvider.keyManager
+        val activeParser = parser ?: CompositePaymentParser(ruleSupplier = { app.ruleStore.getActiveRules() })
 
-        when (val parseResult = parser.parseLiveMessage(rawMessage, keyManager.deviceId)) {
+        when (val parseResult = activeParser.parseLiveMessage(rawMessage, keyManager.deviceId)) {
             is PaymentParseResult.Ignored -> Log.d(TAG, "Notification ignored by policy: ${parseResult.reason}")
-            is PaymentParseResult.Failed -> Log.d(TAG, "Notification did not match financial receipt pattern: ${parseResult.reason}")
+            is PaymentParseResult.Failed -> Log.d(TAG, "Notification did not match financial pattern: ${parseResult.reason}")
             is PaymentParseResult.Success -> {
                 val event = parseResult.event
 
-                val providerEnabled = when (event.provider) {
+                // Verify that rule or provider is actively enabled
+                val matchedRule = app.ruleStore.getActiveRules().firstOrNull { it.id == event.paymentSourceId }
+                val isEnabled = matchedRule?.enabled ?: when (event.provider) {
                     PaymentProvider.VODAFONE_CASH -> keyManager.vfCashEnabled
                     PaymentProvider.NBE_INCOMING_TRANSFER -> keyManager.bankAlAhlyEnabled
-                    else -> false
+                    else -> true
                 }
-                if (!providerEnabled) {
-                    Log.i(TAG, "Payment notification ignored because provider is disabled for this device.")
+
+                if (!isEnabled) {
+                    Log.i(TAG, "Payment notification ignored because rule is disabled: ${event.paymentSourceId}")
                     return
                 }
 
+                // Update monitoring metrics
+                keyManager.lastDetectedNotification = "${rawMessage.title}: ${rawMessage.text.take(60)}"
+                keyManager.lastParsedAmountMinor = event.amountMinor
+                keyManager.lastParsedTime = System.currentTimeMillis()
+
                 Log.i(
                     TAG,
-                    "Payment receipt parsed. Provider=${event.provider}, AmountMinor=${event.amountMinor}, Channel=${event.paymentChannel}"
+                    "Payment receipt parsed: Source=${event.paymentSourceId}, AmountMinor=${event.amountMinor}, Channel=${event.paymentChannel}"
                 )
 
                 val rawSnippetToSave = if (keyManager.rawDiagnosticsEnabled) rawMessage.fullText else null

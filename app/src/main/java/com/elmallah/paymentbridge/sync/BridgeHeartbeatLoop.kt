@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
 import com.elmallah.paymentbridge.BuildConfig
+import com.elmallah.paymentbridge.domain.PaymentRuleStore
 import com.elmallah.paymentbridge.network.ApiClientProvider
 import com.elmallah.paymentbridge.network.HeartbeatRequest
 import com.elmallah.paymentbridge.security.DeviceKeyManager
@@ -18,7 +19,8 @@ class BridgeHeartbeatLoop(
     private val context: Context,
     private val scope: CoroutineScope,
     private val keyManager: DeviceKeyManager,
-    private val apiProvider: ApiClientProvider
+    private val apiProvider: ApiClientProvider,
+    private val ruleStore: PaymentRuleStore? = null
 ) {
     companion object {
         private const val TAG = "BridgeHeartbeat"
@@ -50,20 +52,33 @@ class BridgeHeartbeatLoop(
         return try {
             val response = apiProvider.getApi().sendHeartbeat(request)
             val body = response.body()
+            keyManager.lastServerStatusCode = response.code()
+
             if (response.isSuccessful && body != null) {
                 keyManager.lastHeartbeatTimestamp = System.currentTimeMillis()
                 keyManager.serverBusy = body.busy
                 keyManager.busySessionId = body.busySessionId
 
-                // admin3 is the source of truth for per-device payment providers.
+                // admin3 is authoritative for provider config & dynamic rules
                 keyManager.vfCashEnabled = body.vfCashEnabled
                 keyManager.bankAlAhlyEnabled = body.bankAlAhlyEnabled
+                keyManager.lastServerResponse = "HTTP ${response.code()} OK - Online=${body.online}"
+
+                if (body.rules != null && body.rules.isNotEmpty()) {
+                    ruleStore?.updateRules(body.rules)
+                    keyManager.activeRulesCount = body.rules.count { it.enabled }
+                } else if (body.activeRulesCount != null) {
+                    keyManager.activeRulesCount = body.activeRulesCount
+                }
                 true
             } else {
+                keyManager.lastServerResponse = "HTTP ${response.code()}: ${response.message()}"
                 Log.w(TAG, "Heartbeat rejected: HTTP ${response.code()}")
                 false
             }
         } catch (e: Exception) {
+            keyManager.lastServerStatusCode = -1
+            keyManager.lastServerResponse = "Error: ${e.message ?: e.javaClass.simpleName}"
             Log.w(TAG, "Heartbeat failed: ${e.javaClass.simpleName}")
             false
         }
