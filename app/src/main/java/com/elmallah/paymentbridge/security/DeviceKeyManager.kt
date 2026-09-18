@@ -34,7 +34,7 @@ class DeviceKeyManager(context: Context) {
         private const val KEY_LAST_PARSED_AMOUNT_MINOR = "last_parsed_amount_minor"
         private const val KEY_LAST_PARSED_TIME = "last_parsed_time"
 
-        const val DEFAULT_API_BASE_URL = "https://elmallah-admin3.example.com"
+        const val DEFAULT_API_BASE_URL = "https://elmallah-admin3.vercel.app"
         const val THEME_SYSTEM = "SYSTEM"
         const val THEME_LIGHT = "LIGHT"
         const val THEME_DARK = "DARK"
@@ -63,6 +63,14 @@ class DeviceKeyManager(context: Context) {
         if (!cipher.isNullOrBlank() && !iv.isNullOrBlank()) {
             val decrypted = AndroidKeystoreHelper.decrypt(cipher, iv)
             if (!decrypted.isNullOrBlank()) return decrypted
+
+            if (prefs.getBoolean(KEY_IS_PROVISIONED, false)) {
+                prefs.edit()
+                    .putBoolean(KEY_IS_PROVISIONED, false)
+                    .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
+                    .apply()
+                throw IllegalStateException("Stored HMAC secret could not be decrypted")
+            }
         }
         return ensureDeviceSecret()
     }
@@ -74,14 +82,19 @@ class DeviceKeyManager(context: Context) {
     fun setDeviceSecret(secret: String): Boolean {
         val clean = secret.trim()
         if (clean.length < 32) return false
+
         val encrypted = AndroidKeystoreHelper.encrypt(clean) ?: return false
+        val roundTrip = AndroidKeystoreHelper.decrypt(encrypted.first, encrypted.second)
+        if (roundTrip != clean) return false
+
         prefs.edit()
             .putString(KEY_SECRET_CIPHER, encrypted.first)
             .putString(KEY_SECRET_IV, encrypted.second)
             .putBoolean(KEY_IS_PROVISIONED, true)
             .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, true)
             .apply()
-        return true
+
+        return getDeviceSecret() == clean
     }
 
     var isProvisioned: Boolean
