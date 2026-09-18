@@ -196,6 +196,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
     private fun requestForegroundNotificationPermissionOnce() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
@@ -212,6 +214,5 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val REQUEST_POST_NOTIFICATIONS = 1001
-    }
     }
 }
