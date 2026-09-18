@@ -402,7 +402,7 @@ fun SourceSetupScreen(
                         ) {
                             Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("حفظ مصدر الدفع", fontWeight = FontWeight.Bold)
+                            Text("حفظ واعتماد الإعداد", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
