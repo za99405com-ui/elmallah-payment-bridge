@@ -8,6 +8,7 @@ import com.elmallah.paymentbridge.domain.PaymentRuleStore
 import com.elmallah.paymentbridge.domain.PaymentSourceRule
 import com.elmallah.paymentbridge.network.ApiClientProvider
 import com.elmallah.paymentbridge.network.DeviceProviderConfigRequest
+import com.elmallah.paymentbridge.network.PaymentSourceConfigRequest
 import com.elmallah.paymentbridge.security.DeviceKeyManager
 import com.elmallah.paymentbridge.sync.BridgeForegroundService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,6 +62,79 @@ class SettingsViewModel(
     fun saveRule(rule: PaymentSourceRule) {
         ruleStore?.saveLocalRuleDraft(rule)
         keyManager.activeRulesCount = ruleStore?.getActiveRules()?.count { it.enabled } ?: 0
+
+        if (rule.packageNames.isEmpty()) {
+            rulesSyncStatus.value = "تم حفظ المسودة محلياً. اختر التطبيق أولاً قبل اعتماد الإعداد."
+            return
+        }
+        if (rule.lastTestedSuccess != true) {
+            rulesSyncStatus.value = "تم حفظ المسودة محلياً. اختبر نماذج الرسائل بنجاح قبل اعتمادها في admin3."
+            return
+        }
+        if (!keyManager.isProvisioned) {
+            rulesSyncStatus.value = "تم حفظ المسودة محلياً. ثبّت مفتاح الجهاز واتصل بـ admin3 لاعتماد الإعداد."
+            return
+        }
+
+        viewModelScope.launch {
+            rulesSyncStatus.value = "جارٍ حفظ إعداد المصدر واعتماده في admin3..."
+            try {
+                val parserType = normalizeParserType(rule)
+                val request = PaymentSourceConfigRequest(
+                    sourceId = rule.id,
+                    packageNames = rule.packageNames.distinct().take(10),
+                    sourceSender = rule.senderFilters.takeIf { it.isNotEmpty() }?.joinToString(","),
+                    titleContains = rule.titleContains?.takeIf { it.isNotEmpty() }?.joinToString(","),
+                    bodyContains = rule.bodyContains?.takeIf { it.isNotEmpty() }?.joinToString(","),
+                    amountRegex = rule.amountExtractionRegex,
+                    payerPhoneRegex = rule.senderPhoneExtractionRegex,
+                    accountIdentifierRegex = rule.accountIdentifierRegex,
+                    parserType = parserType
+                )
+
+                val response = ApiClientProvider(keyManager).getApi().savePaymentSourceConfig(request)
+                val body = response.body()
+                if (response.isSuccessful && body != null) {
+                    val authoritativeRules = body.rules.map { it.toDomain() }
+                    ruleStore?.updateRules(
+                        authoritativeRules,
+                        body.rulesVersion,
+                        acceptedDraftId = rule.id
+                    )
+                    keyManager.activeRulesCount = ruleStore?.getActiveRules()?.size ?: 0
+                    rulesSyncStatus.value = if (body.sourceEnabled) {
+                        "تم حفظ إعداد التطبيق وقاعدة الرسالة في admin3 واعتمادها بنجاح."
+                    } else {
+                        "تم حفظ إعداد القراءة، لكن المصدر ما زال متوقفاً من لوحة التحكم."
+                    }
+                } else if (response.code() == 403) {
+                    rulesSyncStatus.value =
+                        "تم حفظ المسودة محلياً فقط. اربط هذا المصدر بالجهاز من لوحة التحكم أولاً ثم أعد الحفظ."
+                } else {
+                    rulesSyncStatus.value =
+                        "تم حفظ المسودة محلياً، لكن تعذر اعتمادها في admin3: HTTP ${response.code()}"
+                }
+            } catch (e: Exception) {
+                rulesSyncStatus.value =
+                    "تم حفظ المسودة محلياً، وتعذر اعتمادها حالياً: ${e.localizedMessage ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    private fun normalizeParserType(rule: PaymentSourceRule): String {
+        val normalized = rule.parserType.trim().lowercase()
+        val allowed = setOf(
+            "regex",
+            "json",
+            "keyword",
+            "smart",
+            "generic_notification",
+            "generic_sms",
+            "vf_cash_v1",
+            "bank_alahly_v1"
+        )
+        if (normalized in allowed) return normalized
+        return if (!rule.amountExtractionRegex.isNullOrBlank()) "regex" else "smart"
     }
 
     fun deleteRule(ruleId: String) {

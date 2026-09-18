@@ -120,19 +120,16 @@ fun SettingsScreen(
     var secretText by remember { mutableStateOf("") }
 
     var activeEditingRule by remember { mutableStateOf<PaymentSourceRule?>(null) }
-    var isAddingNewSource by remember { mutableStateOf(false) }
 
-    if (activeEditingRule != null || isAddingNewSource) {
+    if (activeEditingRule != null) {
         SourceSetupScreen(
             initialRule = activeEditingRule,
             onSave = { savedRule ->
                 viewModel.saveRule(savedRule)
                 activeEditingRule = null
-                isAddingNewSource = false
             },
             onBack = {
                 activeEditingRule = null
-                isAddingNewSource = false
             }
         )
         return
@@ -444,7 +441,6 @@ fun SettingsScreen(
                         hasUnsavedChanges = viewModel.hasUnsavedChanges,
                         syncStatus = rulesSyncStatus,
                         onRefreshFromServer = { viewModel.fetchRulesFromServer() },
-                        onAddNewSource = { isAddingNewSource = true },
                         onEditRule = { rule -> activeEditingRule = rule }
                     )
                 }
@@ -581,7 +577,6 @@ private fun PaymentNotificationSourcesSection(
     hasUnsavedChanges: Boolean,
     syncStatus: String?,
     onRefreshFromServer: () -> Unit,
-    onAddNewSource: () -> Unit,
     onEditRule: (PaymentSourceRule) -> Unit
 ) {
     Column(
@@ -665,7 +660,7 @@ private fun PaymentNotificationSourcesSection(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "يمكنك إضافة مصدر دفع جديد من التطبيقات المثبتة لديك.",
+                        text = "أضف المصدر واربطه بهذا الجهاز من لوحة التحكم، ثم اضغط «تحديث من السيرفر».",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -682,14 +677,14 @@ private fun PaymentNotificationSourcesSection(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        Button(
-            onClick = onAddNewSource,
+        OutlinedButton(
+            onClick = onRefreshFromServer,
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("إضافة مصدر دفع جديد", fontWeight = FontWeight.SemiBold)
+            Text("مزامنة المصادر المعتمدة من لوحة التحكم", fontWeight = FontWeight.SemiBold)
         }
     }
 }
