@@ -39,6 +39,10 @@ class PaymentRuleStore(context: Context) {
         get() = prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_SYNC_TIME, value).apply()
 
+    var lastRulesVersion: String?
+        get() = prefs.getString(KEY_LAST_RULES_VERSION, null)
+        set(value) = prefs.edit().putString(KEY_LAST_RULES_VERSION, value).apply()
+
     init {
         loadRules()
     }
@@ -89,9 +93,10 @@ class PaymentRuleStore(context: Context) {
     /**
      * Updates locally cached rules when authoritative rule updates are received from admin3.
      */
-    fun updateRules(newRules: List<PaymentSourceRule>) {
+    fun updateRules(newRules: List<PaymentSourceRule>, rulesVersion: String? = null) {
         hasSyncedWithServer = true
         lastSyncTimestamp = System.currentTimeMillis()
+        if (!rulesVersion.isNullOrBlank()) lastRulesVersion = rulesVersion
 
         val authoritative = newRules.map { it.copy(isLocalDraft = false) }
         val currentDrafts = _rulesFlow.value.filter { it.isLocalDraft }
@@ -221,6 +226,7 @@ class PaymentRuleStore(context: Context) {
         private const val KEY_AUTHORITATIVE_RULES = "authoritative_payment_rules_json"
         private const val KEY_HAS_SYNCED = "rules_has_synced_with_server"
         private const val KEY_LAST_SYNC_TIME = "rules_last_sync_timestamp"
+        private const val KEY_LAST_RULES_VERSION = "rules_last_version"
 
         val DEFAULT_MESSAGING_PACKAGES = listOf(
             "com.samsung.android.messaging",
