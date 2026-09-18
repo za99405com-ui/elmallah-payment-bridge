@@ -124,7 +124,12 @@ class PaymentNotificationListener : NotificationListenerService() {
         val app = application as? AlMallahBridgeApp
         val activeRules = app?.ruleStore?.getActiveRules() ?: emptyList()
 
-        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title, activeRules)
+        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(
+            sourcePackage,
+            title,
+            activeRules,
+            rawMessage.fullText
+        )
         if (sourceValidation is SourceValidationResult.Rejected) return
 
         serviceScope.launch { processNotification(rawMessage) }
