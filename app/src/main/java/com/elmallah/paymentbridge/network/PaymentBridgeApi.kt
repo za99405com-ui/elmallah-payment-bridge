@@ -25,6 +25,11 @@ interface PaymentBridgeApi {
     @GET("api/payment-bridge/rules")
     suspend fun fetchPaymentRules(): Response<PaymentRulesResponse>
 
+    @POST("api/payment-bridge/source-config")
+    suspend fun savePaymentSourceConfig(
+        @Body request: PaymentSourceConfigRequest
+    ): Response<PaymentSourceConfigResponse>
+
     @GET("api/payment-bridge/health")
     suspend fun checkHealth(): Response<HealthCheckResponse>
 }
