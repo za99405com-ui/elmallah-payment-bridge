@@ -14,6 +14,7 @@ data class PaymentMessageSample(
 
 enum class SourceStatus(val label: String) {
     READY("جاهز"),
+    LOCAL_DRAFT("مسودة محلية"),
     MISSING_APP("ناقص اختيار التطبيق"),
     NO_SAMPLES("لا توجد نماذج رسائل"),
     NEEDS_TEST("يحتاج اختبار"),
@@ -50,6 +51,7 @@ data class PaymentSourceRule(
     val status: SourceStatus
         get() {
             if (!enabled) return SourceStatus.DISABLED_BY_ADMIN
+            if (isLocalDraft) return SourceStatus.LOCAL_DRAFT
             if (packageNames.isEmpty()) return SourceStatus.MISSING_APP
             val hasActivePattern = !amountExtractionRegex.isNullOrBlank() ||
                 !regexPatterns.isNullOrEmpty() ||
