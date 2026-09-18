@@ -125,6 +125,28 @@ data class DeviceProviderConfigResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class PaymentSourceConfigRequest(
+    @Json(name = "sourceId") val sourceId: String,
+    @Json(name = "packageNames") val packageNames: List<String>,
+    @Json(name = "sourceSender") val sourceSender: String? = null,
+    @Json(name = "titleContains") val titleContains: String? = null,
+    @Json(name = "bodyContains") val bodyContains: String? = null,
+    @Json(name = "amountRegex") val amountRegex: String? = null,
+    @Json(name = "payerPhoneRegex") val payerPhoneRegex: String? = null,
+    @Json(name = "accountIdentifierRegex") val accountIdentifierRegex: String? = null,
+    @Json(name = "parserType") val parserType: String = "regex"
+)
+
+@JsonClass(generateAdapter = true)
+data class PaymentSourceConfigResponse(
+    @Json(name = "status") val status: String,
+    @Json(name = "sourceId") val sourceId: String,
+    @Json(name = "sourceEnabled") val sourceEnabled: Boolean = false,
+    @Json(name = "rulesVersion") val rulesVersion: String? = null,
+    @Json(name = "rules") val rules: List<PaymentSourceRuleDto> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
 data class HealthCheckResponse(
     @Json(name = "status") val status: String,
     @Json(name = "version") val version: String? = null,
