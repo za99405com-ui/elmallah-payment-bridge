@@ -36,7 +36,8 @@ class ParserTestViewModel(
 ) : ViewModel() {
 
     private val parser = CompositePaymentParser(
-        ruleSupplier = { ruleStore?.getActiveRules() ?: PaymentRuleStore.getDefaultRules() }
+        // Diagnostic mode may test local drafts; LIVE capture never uses this supplier.
+        ruleSupplier = { ruleStore?.getAllRules()?.filter { it.enabled } ?: PaymentRuleStore.getDefaultRules() }
     )
 
     val rules: StateFlow<List<PaymentSourceRule>> = ruleStore?.rulesFlow
@@ -60,8 +61,8 @@ class ParserTestViewModel(
     val addSampleMessageFeedback = MutableStateFlow<String?>(null)
 
     init {
-        // Default select the first active rule if available
-        val initialRule = ruleStore?.getActiveRules()?.firstOrNull()
+        // Default select the first configured rule, including local drafts for testing.
+        val initialRule = ruleStore?.getAllRules()?.firstOrNull()
         if (initialRule != null) {
             selectedRuleId.value = initialRule.id
             senderTitleInput.value = initialRule.senderFilters.firstOrNull() ?: initialRule.name
@@ -148,7 +149,12 @@ class ParserTestViewModel(
             text = messageTextInput.value.trim(),
             postedAtMillis = System.currentTimeMillis()
         )
-        val result = parser.parseDiagnosticTestMessage(rawMsg, keyManager.deviceId)
+        val diagnosticParser = if (currentRule != null) {
+            CompositePaymentParser(ruleSupplier = { listOf(currentRule.copy(enabled = true)) })
+        } else {
+            parser
+        }
+        val result = diagnosticParser.parseDiagnosticTestMessage(rawMsg, keyManager.deviceId)
         parseResultState.value = result
         saveResultState.value = null
         addSampleMessageFeedback.value = null
