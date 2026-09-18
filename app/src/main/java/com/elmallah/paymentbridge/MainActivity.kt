@@ -1,5 +1,8 @@
 package com.elmallah.paymentbridge
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -66,6 +69,8 @@ class MainActivity : ComponentActivity() {
         val keyManager = app.apiProvider.keyManager
         val apiProvider = app.apiProvider
         val ruleStore = app.ruleStore
+
+        requestForegroundNotificationPermissionOnce()
 
         setContent {
             val context = LocalContext.current
@@ -191,5 +196,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    private fun requestForegroundNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        val prefs = getSharedPreferences("almallah_runtime_permissions", MODE_PRIVATE)
+        if (prefs.getBoolean("post_notifications_requested", false)) return
+
+        prefs.edit().putBoolean("post_notifications_requested", true).apply()
+        requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_POST_NOTIFICATIONS
+        )
+    }
+
+    companion object {
+        private const val REQUEST_POST_NOTIFICATIONS = 1001
+    }
     }
 }
