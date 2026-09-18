@@ -54,6 +54,7 @@ data class HeartbeatResponse(
     @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean = false,
     @Json(name = "serverTime") val serverTime: Long,
     @Json(name = "activeRulesCount") val activeRulesCount: Int? = null,
+    @Json(name = "rulesVersion") val rulesVersion: String? = null,
     @Json(name = "rules") val rules: List<PaymentSourceRuleDto>? = null
 )
 
