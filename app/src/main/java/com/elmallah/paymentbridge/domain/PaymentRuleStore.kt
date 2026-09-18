@@ -79,7 +79,7 @@ class PaymentRuleStore(context: Context) {
         // never become live payment rules until admin3 returns them.
         return loadAuthoritativeRules()
             .filter { it.enabled && it.packageNames.isNotEmpty() }
-            .sortedBy { it.priority }
+            .sortedByDescending { it.priority }
     }
 
     fun getAllRules(): List<PaymentSourceRule> {
