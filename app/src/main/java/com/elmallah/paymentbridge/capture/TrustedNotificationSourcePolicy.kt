@@ -30,7 +30,8 @@ object TrustedNotificationSourcePolicy {
     fun validateSource(
         sourcePackage: String,
         senderTitle: String,
-        rules: List<PaymentSourceRule> = emptyList()
+        rules: List<PaymentSourceRule> = emptyList(),
+        bodyText: String = ""
     ): SourceValidationResult {
         val trimmedPackage = sourcePackage.trim()
         val normalizedTitle = senderTitle.trim()
@@ -51,7 +52,10 @@ object TrustedNotificationSourcePolicy {
                 rule.packageNames.any { it.equals(trimmedPackage, ignoreCase = true) }
             val senderMatch = rule.senderFilters.isEmpty() ||
                 rule.senderFilters.any { it.equals(normalizedTitle, ignoreCase = true) }
-            pkgMatch && senderMatch
+            val bodyMatch = bodyText.isBlank() ||
+                rule.bodyContains.isNullOrEmpty() ||
+                rule.bodyContains.any { bodyText.contains(it, ignoreCase = true) }
+            pkgMatch && senderMatch && bodyMatch
         }
 
         if (matchedRule != null) {
