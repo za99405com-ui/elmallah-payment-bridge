@@ -24,6 +24,7 @@ enum class SourceStatus(val label: String) {
 @JsonClass(generateAdapter = true)
 data class PaymentSourceRule(
     @Json(name = "id") val id: String,
+    @Json(name = "code") val code: String? = null,
     @Json(name = "name") val name: String,
     @Json(name = "enabled") val enabled: Boolean = true,
     @Json(name = "paymentChannel") val paymentChannel: String = "WALLET",
