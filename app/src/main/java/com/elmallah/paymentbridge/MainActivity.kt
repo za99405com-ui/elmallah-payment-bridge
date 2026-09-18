@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,8 +44,6 @@ import com.elmallah.paymentbridge.ui.events.EventsScreen
 import com.elmallah.paymentbridge.ui.events.EventsViewModel
 import com.elmallah.paymentbridge.ui.home.HomeScreen
 import com.elmallah.paymentbridge.ui.home.HomeViewModel
-import com.elmallah.paymentbridge.ui.parsertest.ParserTestScreen
-import com.elmallah.paymentbridge.ui.parsertest.ParserTestViewModel
 import com.elmallah.paymentbridge.ui.settings.SettingsScreen
 import com.elmallah.paymentbridge.ui.settings.SettingsViewModel
 import com.elmallah.paymentbridge.ui.theme.AlMallahTheme
@@ -54,7 +51,6 @@ import com.elmallah.paymentbridge.ui.theme.AlMallahTheme
 sealed class Screen(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Home : Screen("home", "الرئيسية", Icons.Default.Home)
     object Events : Screen("events", "العمليات", Icons.Default.ReceiptLong)
-    object ParserTest : Screen("parser_test", "فحص الرسائل", Icons.Default.Science)
     object Settings : Screen("settings", "الإعدادات", Icons.Default.Settings)
 }
 
@@ -91,14 +87,9 @@ class MainActivity : ComponentActivity() {
                     val eventsViewModel = remember {
                         EventsViewModel(repository, keyManager)
                     }
-                    val parserTestViewModel = remember {
-                        ParserTestViewModel(repository, keyManager, ruleStore)
-                    }
-
                     val bottomNavScreens = listOf(
                         Screen.Home,
                         Screen.Events,
-                        Screen.ParserTest,
                         Screen.Settings
                     )
 
@@ -177,12 +168,6 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Events.route) {
                                 EventsScreen(
                                     viewModel = eventsViewModel
-                                )
-                            }
-                            composable(Screen.ParserTest.route) {
-                                ParserTestScreen(
-                                    viewModel = parserTestViewModel,
-                                    onBack = { navController.popBackStack() }
                                 )
                             }
                             composable(Screen.Settings.route) {
