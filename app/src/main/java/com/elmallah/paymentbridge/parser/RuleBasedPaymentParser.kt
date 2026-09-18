@@ -188,7 +188,7 @@ class RuleBasedPaymentParser(
     private fun extractTransactionReference(text: String): String? {
         // e.g. "رقم العملية: 12345678" or "مرجع: BM987654" or "Ref: 987654321" or "RRN: 11223344"
         val refRegex = Regex(
-            """(?:رقم العملية|المرجعي|رقم المرجع|مرجع|عملية رقم|ref(?:erence)?|rrn|txn)[:\s]*([A-Za-z0-9\-_]{6,30})""",
+            """(?:رقم العملية|المرجعي|رقم المرجع|رقم مرجعي|مرجع|عملية رقم|ref(?:erence)?|rrn|txn)[:\s]*([A-Za-z0-9\-_]{6,30})""",
             RegexOption.IGNORE_CASE
         )
         val match = refRegex.find(text)
