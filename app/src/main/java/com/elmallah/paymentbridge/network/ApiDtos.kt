@@ -50,17 +50,61 @@ data class HeartbeatResponse(
     @Json(name = "online") val online: Boolean,
     @Json(name = "busy") val busy: Boolean,
     @Json(name = "busySessionId") val busySessionId: String? = null,
-    @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean = true,
+    @Json(name = "vfCashEnabled") val vfCashEnabled: Boolean = false,
     @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean = false,
     @Json(name = "serverTime") val serverTime: Long,
     @Json(name = "activeRulesCount") val activeRulesCount: Int? = null,
-    @Json(name = "rules") val rules: List<PaymentSourceRule>? = null
+    @Json(name = "rules") val rules: List<PaymentSourceRuleDto>? = null
 )
 
 @JsonClass(generateAdapter = true)
+data class PaymentSourceRuleDto(
+    @Json(name = "id") val id: String,
+    @Json(name = "code") val code: String? = null,
+    @Json(name = "name") val name: String,
+    @Json(name = "enabled") val enabled: Boolean = false,
+    @Json(name = "channel") val channel: String = "other",
+    @Json(name = "packageNames") val packageNames: List<String> = emptyList(),
+    @Json(name = "sourceSender") val sourceSender: String? = null,
+    @Json(name = "titleContains") val titleContains: String? = null,
+    @Json(name = "bodyContains") val bodyContains: String? = null,
+    @Json(name = "amountRegex") val amountRegex: String? = null,
+    @Json(name = "payerPhoneRegex") val payerPhoneRegex: String? = null,
+    @Json(name = "accountIdentifierRegex") val accountIdentifierRegex: String? = null,
+    @Json(name = "priority") val priority: Int = 100,
+    @Json(name = "parserType") val parserType: String = "regex"
+) {
+    fun toDomain(): PaymentSourceRule = PaymentSourceRule(
+        id = id,
+        name = name.ifBlank { code ?: id },
+        enabled = enabled,
+        paymentChannel = channel,
+        packageNames = packageNames.filter { it.isNotBlank() },
+        senderFilters = splitValues(sourceSender),
+        titleContains = splitValues(titleContains).ifEmpty { null },
+        bodyContains = splitValues(bodyContains).ifEmpty { null },
+        amountExtractionRegex = amountRegex?.takeIf { it.isNotBlank() },
+        senderPhoneExtractionRegex = payerPhoneRegex?.takeIf { it.isNotBlank() },
+        accountIdentifierRegex = accountIdentifierRegex?.takeIf { it.isNotBlank() },
+        priority = priority,
+        parserType = parserType,
+        isLocalDraft = false
+    )
+
+    private fun splitValues(value: String?): List<String> =
+        value
+            ?.split(Regex("""[,;|\n]"""))
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.distinct()
+            ?: emptyList()
+}
+
+@JsonClass(generateAdapter = true)
 data class PaymentRulesResponse(
-    @Json(name = "status") val status: String,
-    @Json(name = "rules") val rules: List<PaymentSourceRule>
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "rulesVersion") val rulesVersion: String? = null,
+    @Json(name = "rules") val rules: List<PaymentSourceRuleDto> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
