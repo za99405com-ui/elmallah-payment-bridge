@@ -122,7 +122,7 @@ class SettingsViewModel(
                 val body = response.body()
                 if (response.isSuccessful && body != null) {
                     val authoritativeRules = body.rules.map { it.toDomain() }
-                    ruleStore?.updateRules(authoritativeRules)
+                    ruleStore?.updateRules(authoritativeRules, body.rulesVersion)
                     keyManager.activeRulesCount = ruleStore?.getActiveRules()?.size ?: 0
                     rulesSyncStatus.value = if (authoritativeRules.isEmpty()) {
                         "تمت المزامنة بنجاح: لا توجد مصادر دفع مفعلة لهذا الجهاز حالياً."
