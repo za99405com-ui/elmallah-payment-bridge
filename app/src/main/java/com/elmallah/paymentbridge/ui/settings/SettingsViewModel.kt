@@ -89,7 +89,10 @@ class SettingsViewModel(
                     amountRegex = rule.amountExtractionRegex,
                     payerPhoneRegex = rule.senderPhoneExtractionRegex,
                     accountIdentifierRegex = rule.accountIdentifierRegex,
-                    parserType = parserType
+                    parserType = parserType,
+                    appName = rule.appName,
+                    sampleSenderTitle = rule.sampleMessages.firstOrNull()?.title,
+                    sampleMessage = rule.sampleMessages.firstOrNull()?.body
                 )
 
                 val response = ApiClientProvider(keyManager).getApi().savePaymentSourceConfig(request)

@@ -1,5 +1,6 @@
 package com.elmallah.paymentbridge.network
 
+import com.elmallah.paymentbridge.domain.PaymentMessageSample
 import com.elmallah.paymentbridge.domain.PaymentSourceRule
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
@@ -73,10 +74,14 @@ data class PaymentSourceRuleDto(
     @Json(name = "payerPhoneRegex") val payerPhoneRegex: String? = null,
     @Json(name = "accountIdentifierRegex") val accountIdentifierRegex: String? = null,
     @Json(name = "priority") val priority: Int = 100,
-    @Json(name = "parserType") val parserType: String = "regex"
+    @Json(name = "parserType") val parserType: String = "regex",
+    @Json(name = "appName") val appName: String? = null,
+    @Json(name = "sampleSenderTitle") val sampleSenderTitle: String? = null,
+    @Json(name = "sampleMessage") val sampleMessage: String? = null
 ) {
     fun toDomain(): PaymentSourceRule = PaymentSourceRule(
         id = id,
+        code = code,
         name = name.ifBlank { code ?: id },
         enabled = enabled,
         paymentChannel = channel,
@@ -89,6 +94,10 @@ data class PaymentSourceRuleDto(
         accountIdentifierRegex = accountIdentifierRegex?.takeIf { it.isNotBlank() },
         priority = priority,
         parserType = parserType,
+        appName = appName,
+        sampleMessages = sampleMessage?.takeIf { it.isNotBlank() }?.let {
+            listOf(PaymentMessageSample(title = sampleSenderTitle.orEmpty(), body = it))
+        } ?: emptyList(),
         isLocalDraft = false
     )
 
@@ -134,7 +143,10 @@ data class PaymentSourceConfigRequest(
     @Json(name = "amountRegex") val amountRegex: String? = null,
     @Json(name = "payerPhoneRegex") val payerPhoneRegex: String? = null,
     @Json(name = "accountIdentifierRegex") val accountIdentifierRegex: String? = null,
-    @Json(name = "parserType") val parserType: String = "regex"
+    @Json(name = "parserType") val parserType: String = "regex",
+    @Json(name = "appName") val appName: String? = null,
+    @Json(name = "sampleSenderTitle") val sampleSenderTitle: String? = null,
+    @Json(name = "sampleMessage") val sampleMessage: String? = null
 )
 
 @JsonClass(generateAdapter = true)

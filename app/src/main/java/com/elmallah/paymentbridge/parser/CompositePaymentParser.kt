@@ -27,7 +27,12 @@ class CompositePaymentParser(
     fun parseLiveMessage(message: RawNotificationMessage, deviceId: String): PaymentParseResult {
         val rules = ruleSupplier().filter { it.enabled }
 
-        when (val validation = TrustedNotificationSourcePolicy.validateSource(message.sourcePackage, message.title, rules)) {
+        when (val validation = TrustedNotificationSourcePolicy.validateSource(
+            message.sourcePackage,
+            message.title,
+            rules,
+            message.fullText
+        )) {
             is SourceValidationResult.Rejected -> {
                 return PaymentParseResult.Ignored(
                     IgnoreReason.IGNORED_NON_PAYMENT_SENDER,
