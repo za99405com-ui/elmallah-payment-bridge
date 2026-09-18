@@ -397,6 +397,37 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("فتح إعدادات صلاحية الاستماع للإشعارات")
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            }
+                            context.startActivity(intent)
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("إعدادات إشعارات خدمة الخلفية")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("إعدادات تحسين البطارية للتشغيل المستمر")
+                    }
                 }
             }
 
@@ -744,6 +775,7 @@ private fun PaymentSourceCard(
 private fun SourceStatusBadge(status: SourceStatus) {
     val (bgColor, textColor) = when (status) {
         SourceStatus.READY -> EmeraldContainer to EmeraldSuccess
+        SourceStatus.LOCAL_DRAFT -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
         SourceStatus.MISSING_APP -> AmberContainer to AmberWarning
         SourceStatus.NO_SAMPLES -> CoralContainer to CoralError
         SourceStatus.NEEDS_TEST -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
