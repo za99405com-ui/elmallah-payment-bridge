@@ -11,6 +11,7 @@ import com.elmallah.paymentbridge.network.DeviceProviderConfigRequest
 import com.elmallah.paymentbridge.security.DeviceKeyManager
 import com.elmallah.paymentbridge.sync.BridgeForegroundService
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -39,16 +40,33 @@ class SettingsViewModel(
     val lastServerResponse = MutableStateFlow(keyManager.lastServerResponse)
     val lastServerStatusCode = MutableStateFlow(keyManager.lastServerStatusCode)
 
-    private val _rules = MutableStateFlow<List<PaymentSourceRule>>(
-        ruleStore?.getActiveRules() ?: PaymentRuleStore.getDefaultRules()
-    )
-    val rules = _rules.asStateFlow()
+    val rules: StateFlow<List<PaymentSourceRule>> = ruleStore?.rulesFlow
+        ?: MutableStateFlow<List<PaymentSourceRule>>(emptyList())
+
+    val hasSyncedWithServer: Boolean
+        get() = ruleStore?.hasSyncedWithServer ?: false
+
+    val lastSyncTimestamp: Long
+        get() = ruleStore?.lastSyncTimestamp ?: 0L
+
+    val hasUnsavedChanges: Boolean
+        get() = ruleStore?.hasUnsavedChanges() ?: false
 
     val healthCheckStatus = MutableStateFlow<String?>(null)
     val provisioningStatus = MutableStateFlow<String?>(null)
     val providerConfigStatus = MutableStateFlow<String?>(null)
     val purgeResultStatus = MutableStateFlow<String?>(null)
     val rulesSyncStatus = MutableStateFlow<String?>(null)
+
+    fun saveRule(rule: PaymentSourceRule) {
+        ruleStore?.saveLocalRuleDraft(rule)
+        keyManager.activeRulesCount = ruleStore?.getActiveRules()?.count { it.enabled } ?: 0
+    }
+
+    fun deleteRule(ruleId: String) {
+        ruleStore?.deleteRule(ruleId)
+        keyManager.activeRulesCount = ruleStore?.getActiveRules()?.count { it.enabled } ?: 0
+    }
 
     fun saveBaseUrl(newUrl: String): Boolean {
         return try {
@@ -88,10 +106,11 @@ class SettingsViewModel(
     }
 
     fun toggleRule(ruleId: String, enabled: Boolean) {
-        ruleStore?.toggleRule(ruleId, enabled)
-        val updated = ruleStore?.getActiveRules() ?: PaymentRuleStore.getDefaultRules()
-        _rules.value = updated
-        keyManager.activeRulesCount = updated.count { it.enabled }
+        val rule = ruleStore?.getRuleById(ruleId)
+        if (rule != null) {
+            ruleStore.saveLocalRuleDraft(rule.copy(enabled = enabled))
+            keyManager.activeRulesCount = ruleStore.getActiveRules().count { it.enabled }
+        }
     }
 
     fun fetchRulesFromServer() {
@@ -103,9 +122,7 @@ class SettingsViewModel(
                 val body = response.body()
                 if (response.isSuccessful && body != null) {
                     ruleStore?.updateRules(body.rules)
-                    val updated = ruleStore?.getActiveRules() ?: body.rules
-                    _rules.value = updated
-                    keyManager.activeRulesCount = updated.count { it.enabled }
+                    keyManager.activeRulesCount = ruleStore?.getActiveRules()?.count { it.enabled } ?: 0
                     rulesSyncStatus.value = "تم بنجاح تحديث ${body.rules.size} قاعدة دفع من admin3."
                 } else {
                     rulesSyncStatus.value = "تعذر جلب القواعد: HTTP ${response.code()}"

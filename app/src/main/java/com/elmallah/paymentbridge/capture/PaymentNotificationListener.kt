@@ -71,12 +71,6 @@ class PaymentNotificationListener : NotificationListenerService() {
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
 
-        val app = application as? AlMallahBridgeApp
-        val activeRules = app?.ruleStore?.getActiveRules() ?: emptyList()
-
-        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title, activeRules)
-        if (sourceValidation is SourceValidationResult.Rejected) return
-
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
@@ -111,6 +105,27 @@ class PaymentNotificationListener : NotificationListenerService() {
             subText = subText,
             postedAtMillis = sbn.postTime
         )
+
+        // Record locally for guided setup sample selection and message testing
+        val friendlyAppName = try {
+            val appInfo = packageManager.getApplicationInfo(sourcePackage, 0)
+            packageManager.getApplicationLabel(appInfo).toString()
+        } catch (_: Exception) {
+            title.ifBlank { sourcePackage }
+        }
+        RecentNotificationStore.addNotification(
+            packageName = sourcePackage,
+            appName = friendlyAppName,
+            title = title,
+            body = resolvedBigText ?: text,
+            timestamp = sbn.postTime
+        )
+
+        val app = application as? AlMallahBridgeApp
+        val activeRules = app?.ruleStore?.getActiveRules() ?: emptyList()
+
+        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(sourcePackage, title, activeRules)
+        if (sourceValidation is SourceValidationResult.Rejected) return
 
         serviceScope.launch { processNotification(rawMessage) }
     }

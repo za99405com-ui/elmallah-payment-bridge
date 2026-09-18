@@ -10,11 +10,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Manages Payment Source Rules received from elmallah-admin3.
+ * Manages Payment Source Rules received from elmallah-admin3 and configured locally.
  *
- * Rules are cached locally so the Payment Bridge can continue capturing facts
- * even during transient server connectivity interruptions.
  * admin3 remains the sole authoritative source of truth.
+ * Rules disabled by admin3 cannot be enabled locally for live payments.
+ * Empty server rule lists are valid and do NOT fall back to local defaults.
  */
 class PaymentRuleStore(context: Context) {
 
@@ -31,6 +31,14 @@ class PaymentRuleStore(context: Context) {
     private val _rulesFlow = MutableStateFlow<List<PaymentSourceRule>>(emptyList())
     val rulesFlow: StateFlow<List<PaymentSourceRule>> = _rulesFlow.asStateFlow()
 
+    var hasSyncedWithServer: Boolean
+        get() = prefs.getBoolean(KEY_HAS_SYNCED, false)
+        set(value) = prefs.edit().putBoolean(KEY_HAS_SYNCED, value).apply()
+
+    var lastSyncTimestamp: Long
+        get() = prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_SYNC_TIME, value).apply()
+
     init {
         loadRules()
     }
@@ -39,49 +47,118 @@ class PaymentRuleStore(context: Context) {
         val json = prefs.getString(KEY_CACHED_RULES, null)
         val loaded = if (!json.isNullOrBlank()) {
             try {
-                adapter.fromJson(json) ?: getDefaultRules()
+                adapter.fromJson(json) ?: emptyList()
             } catch (_: Exception) {
-                getDefaultRules()
+                emptyList()
             }
         } else {
-            getDefaultRules()
+            // Avoid automatic local defaults if never synced
+            emptyList()
         }
         _rulesFlow.value = loaded
     }
 
     fun getActiveRules(): List<PaymentSourceRule> {
-        return _rulesFlow.value.filter { it.enabled }.sortedBy { it.priority }
+        return _rulesFlow.value
+            .filter { it.enabled && it.packageNames.isNotEmpty() }
+            .sortedBy { it.priority }
     }
 
     fun getAllRules(): List<PaymentSourceRule> {
         return _rulesFlow.value
     }
 
+    fun getRuleById(ruleId: String): PaymentSourceRule? {
+        return _rulesFlow.value.firstOrNull { it.id == ruleId }
+    }
+
     /**
      * Updates locally cached rules when authoritative rule updates are received from admin3.
      */
     fun updateRules(newRules: List<PaymentSourceRule>) {
-        if (newRules.isEmpty()) return
+        hasSyncedWithServer = true
+        lastSyncTimestamp = System.currentTimeMillis()
+
+        val current = _rulesFlow.value
+        // Keep local draft rules created on device that don't conflict with server IDs
+        val localDrafts = current.filter { local ->
+            local.isLocalDraft && newRules.none { it.id == local.id }
+        }
+
+        // For server rules, admin3 is strictly authoritative over enabled state
+        val merged = newRules.map { srv ->
+            val localMatch = current.firstOrNull { it.id == srv.id }
+            if (localMatch != null) {
+                srv.copy(
+                    appName = localMatch.appName ?: srv.appName,
+                    packageNames = if (localMatch.packageNames.isNotEmpty()) localMatch.packageNames else srv.packageNames,
+                    sampleMessages = localMatch.sampleMessages.ifEmpty { srv.sampleMessages },
+                    lastTestedSuccess = localMatch.lastTestedSuccess ?: srv.lastTestedSuccess,
+                    enabled = srv.enabled // Admin3 authority wins
+                )
+            } else {
+                srv
+            }
+        } + localDrafts
+
         try {
-            val json = adapter.toJson(newRules)
-            prefs.edit().putString(KEY_CACHED_RULES, json).apply()
-            _rulesFlow.value = newRules
+            val json = adapter.toJson(merged)
+            val authJson = adapter.toJson(newRules)
+            prefs.edit()
+                .putString(KEY_CACHED_RULES, json)
+                .putString(KEY_AUTHORITATIVE_RULES, authJson)
+                .apply()
+            _rulesFlow.value = merged
         } catch (_: Exception) {
-            // Retain existing cached rules if serialization fails
+            _rulesFlow.value = merged
         }
     }
 
-    fun toggleRule(ruleId: String, enabled: Boolean) {
-        val current = _rulesFlow.value
-        val updated = current.map {
-            if (it.id == ruleId) it.copy(enabled = enabled) else it
+    /**
+     * Saves a local draft rule created or edited in the guided setup.
+     */
+    fun saveLocalRuleDraft(rule: PaymentSourceRule) {
+        val current = _rulesFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == rule.id }
+        val updatedRule = rule.copy(isLocalDraft = true)
+        if (index >= 0) {
+            current[index] = updatedRule
+        } else {
+            current.add(updatedRule)
         }
-        updateRules(updated)
+        try {
+            val json = adapter.toJson(current)
+            prefs.edit().putString(KEY_CACHED_RULES, json).apply()
+        } catch (_: Exception) {}
+        _rulesFlow.value = current
+    }
+
+    fun deleteRule(ruleId: String) {
+        val updated = _rulesFlow.value.filterNot { it.id == ruleId }
+        try {
+            val json = adapter.toJson(updated)
+            prefs.edit().putString(KEY_CACHED_RULES, json).apply()
+        } catch (_: Exception) {}
+        _rulesFlow.value = updated
+    }
+
+    fun markRuleTested(ruleId: String, success: Boolean) {
+        val current = _rulesFlow.value.map {
+            if (it.id == ruleId) it.copy(lastTestedSuccess = success) else it
+        }
+        try {
+            val json = adapter.toJson(current)
+            prefs.edit().putString(KEY_CACHED_RULES, json).apply()
+        } catch (_: Exception) {}
+        _rulesFlow.value = current
+    }
+
+    fun hasUnsavedChanges(): Boolean {
+        return _rulesFlow.value.any { it.isLocalDraft }
     }
 
     /**
      * Finds matching rule for an incoming notification.
-     * Evaluates package names, sender filters, title content, and body patterns.
      */
     fun findMatchingRule(
         sourcePackage: String,
@@ -132,6 +209,9 @@ class PaymentRuleStore(context: Context) {
     companion object {
         private const val PREFS_NAME = "almallah_payment_rules_cache"
         private const val KEY_CACHED_RULES = "cached_payment_rules_json"
+        private const val KEY_AUTHORITATIVE_RULES = "authoritative_payment_rules_json"
+        private const val KEY_HAS_SYNCED = "rules_has_synced_with_server"
+        private const val KEY_LAST_SYNC_TIME = "rules_last_sync_timestamp"
 
         val DEFAULT_MESSAGING_PACKAGES = listOf(
             "com.samsung.android.messaging",
@@ -139,15 +219,14 @@ class PaymentRuleStore(context: Context) {
         )
 
         /**
-         * Seed rules for Egyptian mobile payment channels.
-         * admin3 can dynamically reconfigure, disable, or add custom rules.
+         * Seed rules for Egyptian mobile payment channels (available for tests and references).
          */
         fun getDefaultRules(): List<PaymentSourceRule> {
             return listOf(
-                // 1. Vodafone Cash
                 PaymentSourceRule(
                     id = "vodafone_cash",
-                    name = "فودافون كاش (Vodafone Cash)",
+                    name = "فودافون كاش",
+                    appName = "Vodafone Cash",
                     enabled = true,
                     paymentChannel = "WALLET",
                     packageNames = DEFAULT_MESSAGING_PACKAGES,
@@ -155,10 +234,10 @@ class PaymentRuleStore(context: Context) {
                     parserType = "VODAFONE_CASH_LEGACY",
                     priority = 10
                 ),
-                // 2. Bank AlAhly (NBE) Incoming Transfer / InstaPay
                 PaymentSourceRule(
                     id = "nbe_incoming_transfer",
-                    name = "البنك الأهلي المصري (NBE / InstaPay)",
+                    name = "البنك الأهلي",
+                    appName = "NBE Mobile",
                     enabled = true,
                     paymentChannel = "INSTAPAY_OR_BANK_TRANSFER",
                     packageNames = DEFAULT_MESSAGING_PACKAGES,
@@ -166,10 +245,10 @@ class PaymentRuleStore(context: Context) {
                     parserType = "NBE_LEGACY",
                     priority = 20
                 ),
-                // 3. Banque Misr
                 PaymentSourceRule(
                     id = "banque_misr",
-                    name = "بنك مصر (Banque Misr)",
+                    name = "بنك مصر",
+                    appName = "BM Online",
                     enabled = true,
                     paymentChannel = "BANK_TRANSFER",
                     packageNames = DEFAULT_MESSAGING_PACKAGES,
@@ -179,10 +258,10 @@ class PaymentRuleStore(context: Context) {
                     parserType = "RULE_BASED",
                     priority = 30
                 ),
-                // 4. InstaPay Egypt Generic
                 PaymentSourceRule(
                     id = "instapay_egypt",
-                    name = "إنستاباي (InstaPay Egypt)",
+                    name = "إنستاباي",
+                    appName = "InstaPay Egypt",
                     enabled = true,
                     paymentChannel = "INSTAPAY",
                     packageNames = DEFAULT_MESSAGING_PACKAGES,
@@ -192,10 +271,10 @@ class PaymentRuleStore(context: Context) {
                     parserType = "RULE_BASED",
                     priority = 40
                 ),
-                // 5. CIB Egypt
                 PaymentSourceRule(
                     id = "cib_egypt",
-                    name = "البنك التجاري الدولي (CIB)",
+                    name = "CIB",
+                    appName = "CIB Egypt",
                     enabled = true,
                     paymentChannel = "BANK_TRANSFER",
                     packageNames = DEFAULT_MESSAGING_PACKAGES,
@@ -204,30 +283,6 @@ class PaymentRuleStore(context: Context) {
                     amountExtractionRegex = """(?:مبلغ|بمبلغ|قيمة|بقيمة)?\s*(\d+(?:\.\d{1,2})?)\s*(?:جم|جنيه|ج\.م|EGP)""",
                     parserType = "RULE_BASED",
                     priority = 50
-                ),
-                // 6. QNB AlAhli
-                PaymentSourceRule(
-                    id = "qnb_alahli",
-                    name = "بنك قطر الوطني (QNB AlAhli)",
-                    enabled = true,
-                    paymentChannel = "BANK_TRANSFER",
-                    packageNames = DEFAULT_MESSAGING_PACKAGES,
-                    senderFilters = listOf("QNB", "QNB-AlAhli"),
-                    bodyContains = listOf("إضافة", "اضافة", "تحويل", "credited"),
-                    parserType = "RULE_BASED",
-                    priority = 60
-                ),
-                // 7. AlexBank
-                PaymentSourceRule(
-                    id = "alexbank",
-                    name = "بنك الإسكندرية (AlexBank)",
-                    enabled = true,
-                    paymentChannel = "BANK_TRANSFER",
-                    packageNames = DEFAULT_MESSAGING_PACKAGES,
-                    senderFilters = listOf("AlexBank", "Bank-Alex"),
-                    bodyContains = listOf("إضافة", "اضافة", "تحويل", "credited"),
-                    parserType = "RULE_BASED",
-                    priority = 70
                 )
             )
         }

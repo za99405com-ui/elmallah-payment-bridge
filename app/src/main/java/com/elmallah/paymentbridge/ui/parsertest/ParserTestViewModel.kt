@@ -2,15 +2,25 @@ package com.elmallah.paymentbridge.ui.parsertest
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elmallah.paymentbridge.capture.CapturedNotification
+import com.elmallah.paymentbridge.capture.RecentNotificationStore
 import com.elmallah.paymentbridge.data.PaymentRepository
 import com.elmallah.paymentbridge.data.RecordResult
 import com.elmallah.paymentbridge.domain.PaymentBridgeEvent
+import com.elmallah.paymentbridge.domain.PaymentMessageSample
+import com.elmallah.paymentbridge.domain.PaymentRuleStore
+import com.elmallah.paymentbridge.domain.PaymentSourceRule
 import com.elmallah.paymentbridge.domain.RawNotificationMessage
+import com.elmallah.paymentbridge.parser.AutoRuleGenerator
 import com.elmallah.paymentbridge.parser.CompositePaymentParser
 import com.elmallah.paymentbridge.parser.PaymentParseResult
 import com.elmallah.paymentbridge.security.DeviceKeyManager
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class PresetSample(
@@ -22,18 +32,41 @@ data class PresetSample(
 class ParserTestViewModel(
     private val repository: PaymentRepository,
     private val keyManager: DeviceKeyManager,
-    private val ruleStore: com.elmallah.paymentbridge.domain.PaymentRuleStore? = null
+    private val ruleStore: PaymentRuleStore? = null
 ) : ViewModel() {
 
     private val parser = CompositePaymentParser(
-        ruleSupplier = { ruleStore?.getActiveRules() ?: com.elmallah.paymentbridge.domain.PaymentRuleStore.getDefaultRules() }
+        ruleSupplier = { ruleStore?.getActiveRules() ?: PaymentRuleStore.getDefaultRules() }
     )
+
+    val rules: StateFlow<List<PaymentSourceRule>> = ruleStore?.rulesFlow
+        ?: MutableStateFlow(emptyList())
+
+    val selectedRuleId = MutableStateFlow<String?>(null)
+
+    val selectedRule: StateFlow<PaymentSourceRule?> = combine(rules, selectedRuleId) { allRules, id ->
+        if (id != null) allRules.firstOrNull { it.id == id }
+        else allRules.firstOrNull()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val recentNotifications: StateFlow<List<CapturedNotification>> =
+        RecentNotificationStore.notificationsFlow
 
     val senderTitleInput = MutableStateFlow("VF-Cash")
     val messageTextInput = MutableStateFlow("")
 
     val parseResultState = MutableStateFlow<PaymentParseResult?>(null)
     val saveResultState = MutableStateFlow<String?>(null)
+    val addSampleMessageFeedback = MutableStateFlow<String?>(null)
+
+    init {
+        // Default select the first active rule if available
+        val initialRule = ruleStore?.getActiveRules()?.firstOrNull()
+        if (initialRule != null) {
+            selectedRuleId.value = initialRule.id
+            senderTitleInput.value = initialRule.senderFilters.firstOrNull() ?: initialRule.name
+        }
+    }
 
     val samplePresets = listOf(
         PresetSample(
@@ -69,22 +102,85 @@ class ParserTestViewModel(
         )
     )
 
+    fun selectRule(ruleId: String) {
+        selectedRuleId.value = ruleId
+        val rule = rules.value.firstOrNull { it.id == ruleId }
+        if (rule != null) {
+            if (rule.senderFilters.isNotEmpty()) {
+                senderTitleInput.value = rule.senderFilters.first()
+            }
+        }
+        parseResultState.value = null
+        saveResultState.value = null
+        addSampleMessageFeedback.value = null
+    }
+
     fun loadPreset(preset: PresetSample) {
         senderTitleInput.value = preset.sender
         messageTextInput.value = preset.body
         parseResultState.value = null
         saveResultState.value = null
+        addSampleMessageFeedback.value = null
+    }
+
+    fun applyCapturedNotification(notification: CapturedNotification) {
+        senderTitleInput.value = notification.title
+        messageTextInput.value = notification.body
+        // Try auto-selecting the matching rule by packageName
+        val matchingRule = rules.value.firstOrNull { rule ->
+            rule.packageNames.contains(notification.packageName)
+        }
+        if (matchingRule != null) {
+            selectedRuleId.value = matchingRule.id
+        }
+        parseResultState.value = null
+        saveResultState.value = null
+        addSampleMessageFeedback.value = null
     }
 
     fun executeTestParse() {
+        val currentRule = selectedRule.value
+        val sourcePkg = currentRule?.packageNames?.firstOrNull() ?: "com.manual.parser.test"
+
         val rawMsg = RawNotificationMessage(
-            sourcePackage = "com.manual.parser.test",
+            sourcePackage = sourcePkg,
             title = senderTitleInput.value.trim(),
             text = messageTextInput.value.trim(),
             postedAtMillis = System.currentTimeMillis()
         )
-        parseResultState.value = parser.parseDiagnosticTestMessage(rawMsg, keyManager.deviceId)
+        val result = parser.parseDiagnosticTestMessage(rawMsg, keyManager.deviceId)
+        parseResultState.value = result
         saveResultState.value = null
+        addSampleMessageFeedback.value = null
+
+        // Mark rule tested in ruleStore
+        if (currentRule != null) {
+            val isSuccess = result is PaymentParseResult.Success
+            ruleStore?.markRuleTested(currentRule.id, isSuccess)
+        }
+    }
+
+    fun addCurrentMessageAsSampleToSelectedRule() {
+        val currentRule = selectedRule.value ?: return
+        val title = senderTitleInput.value.trim()
+        val body = messageTextInput.value.trim()
+
+        if (body.isBlank()) return
+
+        val newSample = PaymentMessageSample(title = title, body = body)
+        val updatedSamples = currentRule.sampleMessages + newSample
+
+        val updatedRule = AutoRuleGenerator.buildRuleFromSamples(
+            existingRule = currentRule,
+            ruleId = currentRule.id,
+            sourceName = currentRule.name,
+            selectedPackage = currentRule.packageNames.firstOrNull() ?: "",
+            appName = currentRule.appName,
+            samples = updatedSamples
+        )
+
+        ruleStore?.saveLocalRuleDraft(updatedRule)
+        addSampleMessageFeedback.value = "تمت إضافة هذه الرسالة كنموذج جديد لمصدر \"${currentRule.name}\" وتحديث قواعد الاستخراج بنجاح."
     }
 
     fun saveParsedEventLocally(event: PaymentBridgeEvent) {

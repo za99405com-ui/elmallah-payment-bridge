@@ -36,7 +36,18 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Settings
+import com.elmallah.paymentbridge.capture.RecentNotificationStore
+import com.elmallah.paymentbridge.domain.SourceStatus
+import com.elmallah.paymentbridge.ui.components.AppIconView
+import com.elmallah.paymentbridge.ui.theme.AmberContainer
+import com.elmallah.paymentbridge.ui.theme.AmberWarning
+import com.elmallah.paymentbridge.ui.theme.CoralContainer
+import com.elmallah.paymentbridge.ui.theme.CoralError
+import com.elmallah.paymentbridge.ui.theme.EmeraldContainer
+import com.elmallah.paymentbridge.ui.theme.EmeraldSuccess
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -107,6 +118,25 @@ fun SettingsScreen(
 
     var urlText by remember(baseUrl) { mutableStateOf(baseUrl) }
     var secretText by remember { mutableStateOf("") }
+
+    var activeEditingRule by remember { mutableStateOf<PaymentSourceRule?>(null) }
+    var isAddingNewSource by remember { mutableStateOf(false) }
+
+    if (activeEditingRule != null || isAddingNewSource) {
+        SourceSetupScreen(
+            initialRule = activeEditingRule,
+            onSave = { savedRule ->
+                viewModel.saveRule(savedRule)
+                activeEditingRule = null
+                isAddingNewSource = false
+            },
+            onBack = {
+                activeEditingRule = null
+                isAddingNewSource = false
+            }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -370,55 +400,22 @@ fun SettingsScreen(
                 }
             }
 
-            // 4. PAYMENT SOURCE RULES CARD (admin3-managed)
+            // 4. مصادر إشعارات الدفع (Payment Notification Sources)
             item {
                 SettingsSectionCard(
-                    title = "قواعد مصادر الدفع (Payment Source Rules)",
+                    title = "مصادر إشعارات الدفع",
                     icon = Icons.Default.Payment
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "القواعد المعتمدة ديناميكياً من admin3:",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        OutlinedButton(
-                            onClick = { viewModel.fetchRulesFromServer() },
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("تحديث القواعد", fontSize = 12.sp)
-                        }
-                    }
-
-                    if (!rulesSyncStatus.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = rulesSyncStatus ?: "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // List each rule
-                    rules.forEach { rule ->
-                        RuleItemRow(
-                            rule = rule,
-                            onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) }
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                        )
-                    }
+                    PaymentNotificationSourcesSection(
+                        rules = rules,
+                        hasSynced = viewModel.hasSyncedWithServer,
+                        lastSyncTimestamp = viewModel.lastSyncTimestamp,
+                        hasUnsavedChanges = viewModel.hasUnsavedChanges,
+                        syncStatus = rulesSyncStatus,
+                        onRefreshFromServer = { viewModel.fetchRulesFromServer() },
+                        onAddNewSource = { isAddingNewSource = true },
+                        onEditRule = { rule -> activeEditingRule = rule }
+                    )
                 }
             }
 
@@ -546,51 +543,223 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun RuleItemRow(
-    rule: PaymentSourceRule,
-    onToggle: (Boolean) -> Unit
+private fun PaymentNotificationSourcesSection(
+    rules: List<PaymentSourceRule>,
+    hasSynced: Boolean,
+    lastSyncTimestamp: Long,
+    hasUnsavedChanges: Boolean,
+    syncStatus: String?,
+    onRefreshFromServer: () -> Unit,
+    onAddNewSource: () -> Unit,
+    onEditRule: (PaymentSourceRule) -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = rule.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
+        // Sync header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                if (!hasSynced) {
+                    Text(
+                        text = "لم تتم مزامنة إعدادات مصادر الدفع بعد",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "آخر مزامنة: ${RecentNotificationStore.formatRelativeTime(lastSyncTimestamp)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (hasUnsavedChanges) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = AmberContainer
+                            ) {
+                                Text(
+                                    text = "تعديلات غير محفوظة",
+                                    color = AmberWarning,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = onRefreshFromServer,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("تحديث من السيرفر", fontSize = 12.sp)
+            }
+        }
+
+        if (!syncStatus.isNullOrBlank()) {
+            Text(
+                text = syncStatus,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        if (rules.isEmpty()) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = rule.paymentChannel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        text = if (!hasSynced) "لا توجد مصادر دفع محددة بعد." else "لم يتم تعيين مصادر دفع في لوحة التحكم.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "يمكنك إضافة مصدر دفع جديد من التطبيقات المثبتة لديك.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Text(
-                text = "المرسلون: ${if (rule.senderFilters.isEmpty()) "الكل" else rule.senderFilters.joinToString(", ")}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (!rule.destinationAccount.isNullOrBlank()) {
-                Text(
-                    text = "الحساب المستهدف: ${rule.destinationAccount}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            rules.forEach { rule ->
+                PaymentSourceCard(
+                    rule = rule,
+                    onEdit = { onEditRule(rule) }
                 )
             }
         }
-        Switch(
-            checked = rule.enabled,
-            onCheckedChange = onToggle
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Button(
+            onClick = onAddNewSource,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("إضافة مصدر دفع جديد", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun PaymentSourceCard(
+    rule: PaymentSourceRule,
+    onEdit: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    AppIconView(
+                        packageName = rule.packageNames.firstOrNull(),
+                        modifier = Modifier.size(34.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = rule.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "التطبيق: ${rule.friendlyDisplayAppName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                SourceStatusBadge(status = rule.status)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "نماذج الرسائل: ${rule.sampleMessages.size}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (rule.status == SourceStatus.MISSING_APP || rule.status == SourceStatus.NO_SAMPLES) {
+                    Button(
+                        onClick = onEdit,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("إعداد", fontSize = 12.sp)
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onEdit,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("تعديل", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceStatusBadge(status: SourceStatus) {
+    val (bgColor, textColor) = when (status) {
+        SourceStatus.READY -> EmeraldContainer to EmeraldSuccess
+        SourceStatus.MISSING_APP -> AmberContainer to AmberWarning
+        SourceStatus.NO_SAMPLES -> CoralContainer to CoralError
+        SourceStatus.NEEDS_TEST -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
+        SourceStatus.DISABLED_BY_ADMIN -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = bgColor
+    ) {
+        Text(
+            text = status.label,
+            color = textColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }
 }
