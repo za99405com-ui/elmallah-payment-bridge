@@ -376,8 +376,7 @@ private fun SimplePaymentRuleCard(
         "instapay" -> "إنستا باي"
         else -> rule.name
     }
-    val configured = rule.packageNames.isNotEmpty() &&
-        (!rule.amountExtractionRegex.isNullOrBlank() || rule.sampleMessages.isNotEmpty())
+    val configured = rule.packageNames.isNotEmpty() && rule.sampleMessages.isNotEmpty()
 
     Surface(
         modifier = Modifier
