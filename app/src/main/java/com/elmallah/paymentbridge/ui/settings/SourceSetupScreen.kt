@@ -340,7 +340,7 @@ fun SourceSetupScreen(
                             generated.copy(
                                 code = initialRule.code,
                                 name = logicalName,
-                                senderFilters = if (senderTitle.isNotBlank()) listOf(senderTitle) else emptyList(),
+                                senderFilters = emptyList(),
                                 bodyContains = signature,
                                 parserType = "regex",
                                 isLocalDraft = true,
