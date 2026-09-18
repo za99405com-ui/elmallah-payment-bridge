@@ -121,9 +121,14 @@ class SettingsViewModel(
                 val response = api.fetchPaymentRules()
                 val body = response.body()
                 if (response.isSuccessful && body != null) {
-                    ruleStore?.updateRules(body.rules)
-                    keyManager.activeRulesCount = ruleStore?.getActiveRules()?.count { it.enabled } ?: 0
-                    rulesSyncStatus.value = "تم بنجاح تحديث ${body.rules.size} قاعدة دفع من admin3."
+                    val authoritativeRules = body.rules.map { it.toDomain() }
+                    ruleStore?.updateRules(authoritativeRules)
+                    keyManager.activeRulesCount = ruleStore?.getActiveRules()?.size ?: 0
+                    rulesSyncStatus.value = if (authoritativeRules.isEmpty()) {
+                        "تمت المزامنة بنجاح: لا توجد مصادر دفع مفعلة لهذا الجهاز حالياً."
+                    } else {
+                        "تم بنجاح تحديث ${authoritativeRules.size} قاعدة دفع من admin3."
+                    }
                 } else {
                     rulesSyncStatus.value = "تعذر جلب القواعد: HTTP ${response.code()}"
                 }
@@ -179,7 +184,8 @@ class SettingsViewModel(
             keyManager.bridgeUploadEnabled = true
             bridgeUploadEnabled.value = true
             isProvisioned.value = true
-            "تم حفظ مفتاح HMAC داخل Android Keystore وتفعيل الربط مع السيرفر."
+            appContext?.let { BridgeForegroundService.start(it) }
+            "تم حفظ مفتاح HMAC داخل Android Keystore وتشغيل خدمة الخلفية."
         } else {
             "مفتاح التهيئة غير صالح. يجب أن يكون 32 حرفاً على الأقل."
         }
