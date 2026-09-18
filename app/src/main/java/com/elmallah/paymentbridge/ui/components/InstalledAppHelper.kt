@@ -1,6 +1,7 @@
 package com.elmallah.paymentbridge.ui.components
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -42,8 +43,13 @@ object InstalledAppHelper {
         searchQuery: String = ""
     ): List<InstalledAppItem> {
         val pm = context.packageManager
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
         val apps = try {
-            pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            pm.queryIntentActivities(launcherIntent, 0)
+                .mapNotNull { it.activityInfo?.applicationInfo }
+                .distinctBy { it.packageName }
         } catch (_: Exception) {
             emptyList()
         }

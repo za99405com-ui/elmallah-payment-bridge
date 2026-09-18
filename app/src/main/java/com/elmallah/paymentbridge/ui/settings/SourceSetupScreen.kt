@@ -390,7 +390,9 @@ fun SourceSetupScreen(
                                     parserType = advancedParserType,
                                     priority = advancedPriority,
                                     isLocalDraft = true,
-                                    lastTestedSuccess = true
+                                    lastTestedSuccess = validSamples.isNotEmpty() && validSamples.all { sample ->
+                                        sampleAnalysisResults[sample.id]?.success == true
+                                    }
                                 )
 
                                 onSave(finalRule)

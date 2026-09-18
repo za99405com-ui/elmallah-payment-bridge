@@ -3,7 +3,6 @@ package com.elmallah.paymentbridge.parser
 import com.elmallah.paymentbridge.capture.SourceValidationResult
 import com.elmallah.paymentbridge.capture.TrustedNotificationSourcePolicy
 import com.elmallah.paymentbridge.domain.PaymentProvider
-import com.elmallah.paymentbridge.domain.PaymentRuleStore
 import com.elmallah.paymentbridge.domain.PaymentSourceRule
 import com.elmallah.paymentbridge.domain.RawNotificationMessage
 
@@ -12,7 +11,7 @@ import com.elmallah.paymentbridge.domain.RawNotificationMessage
  * generic dynamic rule-based parsers fetched from elmallah-admin3.
  */
 class CompositePaymentParser(
-    private val ruleSupplier: () -> List<PaymentSourceRule> = { PaymentRuleStore.getDefaultRules() },
+    private val ruleSupplier: () -> List<PaymentSourceRule> = { emptyList() },
     private val legacyParsers: List<PaymentMessageParser> = listOf(
         VodafoneCashParser(),
         NbeIncomingTransferParser()

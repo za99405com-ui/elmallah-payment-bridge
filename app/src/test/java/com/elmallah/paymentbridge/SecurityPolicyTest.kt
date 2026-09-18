@@ -3,6 +3,7 @@ package com.elmallah.paymentbridge
 import com.elmallah.paymentbridge.capture.SourceValidationResult
 import com.elmallah.paymentbridge.capture.TrustedNotificationSourcePolicy
 import com.elmallah.paymentbridge.domain.PaymentProvider
+import com.elmallah.paymentbridge.domain.PaymentRuleStore
 import com.elmallah.paymentbridge.domain.RawNotificationMessage
 import com.elmallah.paymentbridge.parser.CompositePaymentParser
 import com.elmallah.paymentbridge.parser.PaymentParseResult
@@ -54,10 +55,13 @@ class SecurityPolicyTest {
 
     @Test
     fun testAcceptOnlyTrustedMessagingAppAndApprovedSender() {
-        // Samsung Messages + VF-Cash
+        val authorizedRules = PaymentRuleStore.getDefaultRules()
+
+        // Samsung Messages + VF-Cash only when explicitly authorized
         val vfSamsung = TrustedNotificationSourcePolicy.validateSource(
             sourcePackage = "com.samsung.android.messaging",
-            senderTitle = "VF-Cash"
+            senderTitle = "VF-Cash",
+            rules = authorizedRules
         )
         assertTrue(vfSamsung is SourceValidationResult.Accepted)
         assertEquals(PaymentProvider.VODAFONE_CASH, (vfSamsung as SourceValidationResult.Accepted).provider)
@@ -65,7 +69,8 @@ class SecurityPolicyTest {
         // Google Messages + Bank-AlAhly
         val nbeGoogle = TrustedNotificationSourcePolicy.validateSource(
             sourcePackage = "com.google.android.apps.messaging",
-            senderTitle = "Bank-AlAhly"
+            senderTitle = "Bank-AlAhly",
+            rules = authorizedRules
         )
         assertTrue(nbeGoogle is SourceValidationResult.Accepted)
         assertEquals(PaymentProvider.NBE_INCOMING_TRANSFER, (nbeGoogle as SourceValidationResult.Accepted).provider)

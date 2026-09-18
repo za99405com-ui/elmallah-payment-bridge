@@ -39,6 +39,10 @@ class PaymentRuleStore(context: Context) {
         get() = prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_SYNC_TIME, value).apply()
 
+    var lastRulesVersion: String?
+        get() = prefs.getString(KEY_LAST_RULES_VERSION, null)
+        set(value) = prefs.edit().putString(KEY_LAST_RULES_VERSION, value).apply()
+
     init {
         loadRules()
     }
@@ -58,8 +62,22 @@ class PaymentRuleStore(context: Context) {
         _rulesFlow.value = loaded
     }
 
+    private fun loadAuthoritativeRules(): List<PaymentSourceRule> {
+        if (!hasSyncedWithServer) return emptyList()
+        val json = prefs.getString(KEY_AUTHORITATIVE_RULES, null)
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            adapter.fromJson(json) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     fun getActiveRules(): List<PaymentSourceRule> {
-        return _rulesFlow.value
+        // LIVE processing must use only the last authoritative admin3 snapshot.
+        // Local drafts remain available in rulesFlow for setup/testing but can
+        // never become live payment rules until admin3 returns them.
+        return loadAuthoritativeRules()
             .filter { it.enabled && it.packageNames.isNotEmpty() }
             .sortedBy { it.priority }
     }
@@ -75,43 +93,39 @@ class PaymentRuleStore(context: Context) {
     /**
      * Updates locally cached rules when authoritative rule updates are received from admin3.
      */
-    fun updateRules(newRules: List<PaymentSourceRule>) {
+    fun updateRules(newRules: List<PaymentSourceRule>, rulesVersion: String? = null) {
         hasSyncedWithServer = true
         lastSyncTimestamp = System.currentTimeMillis()
+        if (!rulesVersion.isNullOrBlank()) lastRulesVersion = rulesVersion
 
-        val current = _rulesFlow.value
-        // Keep local draft rules created on device that don't conflict with server IDs
-        val localDrafts = current.filter { local ->
-            local.isLocalDraft && newRules.none { it.id == local.id }
-        }
+        val authoritative = newRules.map { it.copy(isLocalDraft = false) }
+        val currentDrafts = _rulesFlow.value.filter { it.isLocalDraft }
 
-        // For server rules, admin3 is strictly authoritative over enabled state
-        val merged = newRules.map { srv ->
-            val localMatch = current.firstOrNull { it.id == srv.id }
-            if (localMatch != null) {
-                srv.copy(
-                    appName = localMatch.appName ?: srv.appName,
-                    packageNames = if (localMatch.packageNames.isNotEmpty()) localMatch.packageNames else srv.packageNames,
-                    sampleMessages = localMatch.sampleMessages.ifEmpty { srv.sampleMessages },
-                    lastTestedSuccess = localMatch.lastTestedSuccess ?: srv.lastTestedSuccess,
-                    enabled = srv.enabled // Admin3 authority wins
+        // Keep drafts visible for merchant setup, but never mix them into the
+        // authoritative snapshot used by live notification processing.
+        val mergedForUi = authoritative.map { serverRule ->
+            val draft = currentDrafts.firstOrNull { it.id == serverRule.id }
+            if (draft != null) {
+                draft.copy(
+                    enabled = serverRule.enabled,
+                    isLocalDraft = true
                 )
             } else {
-                srv
+                serverRule
             }
-        } + localDrafts
+        } + currentDrafts.filter { draft ->
+            authoritative.none { it.id == draft.id }
+        }
 
         try {
-            val json = adapter.toJson(merged)
-            val authJson = adapter.toJson(newRules)
             prefs.edit()
-                .putString(KEY_CACHED_RULES, json)
-                .putString(KEY_AUTHORITATIVE_RULES, authJson)
+                .putString(KEY_CACHED_RULES, adapter.toJson(mergedForUi))
+                .putString(KEY_AUTHORITATIVE_RULES, adapter.toJson(authoritative))
                 .apply()
-            _rulesFlow.value = merged
         } catch (_: Exception) {
-            _rulesFlow.value = merged
+            // Keep in-memory state even if local serialization fails.
         }
+        _rulesFlow.value = mergedForUi
     }
 
     /**
@@ -212,6 +226,7 @@ class PaymentRuleStore(context: Context) {
         private const val KEY_AUTHORITATIVE_RULES = "authoritative_payment_rules_json"
         private const val KEY_HAS_SYNCED = "rules_has_synced_with_server"
         private const val KEY_LAST_SYNC_TIME = "rules_last_sync_timestamp"
+        private const val KEY_LAST_RULES_VERSION = "rules_last_version"
 
         val DEFAULT_MESSAGING_PACKAGES = listOf(
             "com.samsung.android.messaging",

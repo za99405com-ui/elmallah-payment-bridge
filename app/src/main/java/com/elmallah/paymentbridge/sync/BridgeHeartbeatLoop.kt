@@ -50,7 +50,8 @@ class BridgeHeartbeatLoop(
         )
 
         return try {
-            val response = apiProvider.getApi().sendHeartbeat(request)
+            val api = apiProvider.getApi()
+            val response = api.sendHeartbeat(request)
             val body = response.body()
             keyManager.lastServerStatusCode = response.code()
 
@@ -64,11 +65,43 @@ class BridgeHeartbeatLoop(
                 keyManager.bankAlAhlyEnabled = body.bankAlAhlyEnabled
                 keyManager.lastServerResponse = "HTTP ${response.code()} OK - Online=${body.online}"
 
-                if (body.rules != null && body.rules.isNotEmpty()) {
-                    ruleStore?.updateRules(body.rules)
-                    keyManager.activeRulesCount = body.rules.count { it.enabled }
-                } else if (body.activeRulesCount != null) {
-                    keyManager.activeRulesCount = body.activeRulesCount
+                if (body.rules != null) {
+                    // Compatibility path if the heartbeat ever embeds rules.
+                    val authoritativeRules = body.rules.map { it.toDomain() }
+                    ruleStore?.updateRules(authoritativeRules, body.rulesVersion)
+                    keyManager.activeRulesCount = authoritativeRules.count { it.enabled }
+                } else {
+                    if (body.activeRulesCount != null) {
+                        keyManager.activeRulesCount = body.activeRulesCount
+                    }
+
+                    // Current admin3 heartbeat sends a rulesVersion, not the full rules.
+                    // Fetch rules only on first sync or when that version changes.
+                    val store = ruleStore
+                    val shouldRefreshRules = store != null && (
+                        !store.hasSyncedWithServer ||
+                            (!body.rulesVersion.isNullOrBlank() && body.rulesVersion != store.lastRulesVersion)
+                        )
+
+                    if (shouldRefreshRules && store != null) {
+                        try {
+                            val rulesResponse = api.fetchPaymentRules()
+                            val rulesBody = rulesResponse.body()
+                            if (rulesResponse.isSuccessful && rulesBody != null) {
+                                val authoritativeRules = rulesBody.rules.map { it.toDomain() }
+                                store.updateRules(
+                                    authoritativeRules,
+                                    rulesBody.rulesVersion ?: body.rulesVersion
+                                )
+                                keyManager.activeRulesCount = authoritativeRules.count { it.enabled }
+                                Log.i(TAG, "Payment rules refreshed automatically. Count=${authoritativeRules.size}")
+                            } else {
+                                Log.w(TAG, "Rules refresh rejected: HTTP ${rulesResponse.code()}")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Automatic rules refresh failed: ${e.javaClass.simpleName}")
+                        }
+                    }
                 }
                 true
             } else {

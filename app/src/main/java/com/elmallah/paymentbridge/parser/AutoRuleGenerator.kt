@@ -32,9 +32,27 @@ object AutoRuleGenerator {
     )
 
     private val OUTGOING_KEYWORDS = listOf(
-        "تم تنفيذ تحويل إلى", "تم تحويل إلى", "خصم", "سحب", "مدفوعات", "شراء",
-        "debited", "paid", "withdrawn", "sent to"
+        "خصم", "تم الخصم", "سحب", "تم السحب", "شراء", "مدفوعات",
+        "debited", "withdrawn", "sent to", "paid to"
     )
+
+    private fun isClearlyOutgoing(text: String): Boolean {
+        val merchantRecipient = listOf(
+            "إلى حسابك", "الى حسابك", "لحسابك", "إلى محفظتك", "الى محفظتك"
+        ).any { text.contains(it, ignoreCase = true) }
+
+        if (OUTGOING_KEYWORDS.any { text.contains(it, ignoreCase = true) }) return true
+        if (text.contains("من حسابكم", ignoreCase = true) || text.contains("من حسابك", ignoreCase = true)) {
+            if (text.contains(" إلى ", ignoreCase = true) || text.contains(" الى ", ignoreCase = true)) return true
+        }
+
+        val transferToOtherParty = Regex(
+            """(?:تم\s*)?(?:تنفيذ\s*)?تحويل.*(?:\sإلى\s|\sالى\s)""",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(text)
+
+        return transferToOtherParty && !merchantRecipient
+    }
 
     /**
      * Analyzes a single message sample to extract amount, phone, ref, and direction.
@@ -50,9 +68,16 @@ object AutoRuleGenerator {
         val normalized = MessageNormalizer.normalizeForParsing(rawBody)
 
         // 1. Check operation direction
-        val isOutgoing = OUTGOING_KEYWORDS.any { normalized.contains(it, ignoreCase = true) }
-        val isIncoming = INCOMING_KEYWORDS.any { normalized.contains(it, ignoreCase = true) }
-        val operationType = if (isOutgoing && !isIncoming) "تحويل صادر (يُتجاهل)" else "استلام أموال"
+        val isOutgoing = isClearlyOutgoing(normalized)
+        val operationType = if (isOutgoing) "تحويل صادر (يُتجاهل)" else "استلام أموال"
+
+        if (isOutgoing) {
+            return AutoDetectionResult(
+                success = false,
+                operationType = operationType,
+                statusMessage = "الرسالة تبدو عملية صادرة وليست استلام أموال"
+            )
+        }
 
         // 2. Extract Amount
         val amountMinor = extractAmountMinor(normalized)
@@ -118,7 +143,7 @@ object AutoRuleGenerator {
         }
 
         // General non-hardcoded amount extraction regex
-        val generalAmountRegex = """(?:مبلغ|بمبلغ|قيمة|بقيمة|تحويل|استلام|إيداع|ايداع|credited|received)?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:جم|جنيه|ج\.م|EGP|LE)?"""
+        val generalAmountRegex = """(?:مبلغ|بمبلغ|قيمة|بقيمة|تحويل|استلام|إيداع|ايداع|credited|received)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:[\.,][0-9]{1,2})?)\s*(?:جم|جنيه|ج\.م|EGP|LE)?"""
 
         // General non-hardcoded phone extraction regex
         val generalPhoneRegex = """(?:من|from)?\s*(01[0125][0-9]{8})\b"""
@@ -143,31 +168,31 @@ object AutoRuleGenerator {
             accountIdentifierRegex = existingRule?.accountIdentifierRegex ?: generalAccountRegex,
             sampleMessages = samples,
             isLocalDraft = true,
-            lastTestedSuccess = true,
+            lastTestedSuccess = samples.isNotEmpty() && samples.all { analyzeSample(it.title, it.body).success },
             parserType = existingRule?.parserType ?: "RULE_BASED",
             enabled = existingRule?.enabled ?: true
         )
     }
 
     private fun extractAmountMinor(text: String): Long? {
+        val numberPattern = """([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:[\.,][0-9]{1,2})?)"""
         val patterns = listOf(
-            // "180.00 جنيه" or "1,250.50 جم" or "287.22 EGP"
-            Regex("""(?:مبلغ|بمبلغ|قيمة|بقيمة|تحويل|استلام|إيداع|ايداع|credited|received)?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:جم|جنيه|ج\.م|EGP|LE)""", RegexOption.IGNORE_CASE),
-            // "جنيه 250" or "EGP 250"
-            Regex("""(?:جم|جنيه|ج\.م|EGP|LE)\s*(\d+(?:[.,]\d{1,2})?)""", RegexOption.IGNORE_CASE),
-            // Standalone decimal amount
-            Regex("""\b(\d{1,6}\.\d{2})\b""")
+            Regex(
+                """(?:مبلغ|بمبلغ|قيمة|بقيمة|تحويل|استلام|إيداع|ايداع|credited|received)?\s*$numberPattern\s*(?:جم|جنيه|ج\.م|EGP|LE)""",
+                RegexOption.IGNORE_CASE
+            ),
+            Regex(
+                """(?:جم|جنيه|ج\.م|EGP|LE)\s*$numberPattern""",
+                RegexOption.IGNORE_CASE
+            ),
+            Regex("""\b([0-9]{1,6}\.[0-9]{2})\b""")
         )
 
         for (pattern in patterns) {
             val match = pattern.find(text)
-            if (match != null && match.groupValues.size > 1) {
-                val numStr = match.groupValues[1].replace(",", "").trim()
-                val doubleVal = numStr.toDoubleOrNull()
-                if (doubleVal != null && doubleVal > 0.0) {
-                    return Math.round(doubleVal * 100)
-                }
-            }
+            val candidate = match?.groupValues?.getOrNull(1) ?: continue
+            val parsed = MessageNormalizer.parseAmountToMinor(candidate)
+            if (parsed != null && parsed > 0L) return parsed
         }
         return null
     }

@@ -1,7 +1,5 @@
 package com.elmallah.paymentbridge.capture
 
-import com.elmallah.paymentbridge.domain.PaymentProvider
-import com.elmallah.paymentbridge.domain.PaymentRuleStore
 import com.elmallah.paymentbridge.domain.PaymentSourceRule
 
 sealed class SourceValidationResult {
@@ -32,7 +30,7 @@ object TrustedNotificationSourcePolicy {
     fun validateSource(
         sourcePackage: String,
         senderTitle: String,
-        rules: List<PaymentSourceRule> = PaymentRuleStore.getDefaultRules()
+        rules: List<PaymentSourceRule> = emptyList()
     ): SourceValidationResult {
         val trimmedPackage = sourcePackage.trim()
         val normalizedTitle = senderTitle.trim()
@@ -63,14 +61,8 @@ object TrustedNotificationSourcePolicy {
             )
         }
 
-        // 3. Fallback compatibility for standard legacy senders
-        if (normalizedTitle.equals(SENDER_VODAFONE_CASH, ignoreCase = true)) {
-            return SourceValidationResult.Accepted(PaymentProvider.VODAFONE_CASH)
-        }
-        if (normalizedTitle.equals(SENDER_NBE, ignoreCase = true)) {
-            return SourceValidationResult.Accepted(PaymentProvider.NBE_INCOMING_TRANSFER)
-        }
-
+        // No sender-only fallback is allowed in LIVE mode. An empty admin3 rule
+        // list is authoritative and must disable live payment detection.
         return SourceValidationResult.Rejected(
             "عنوان المرسل غير معتمد: '$normalizedTitle' (لا توجد قاعدة مطابقة معتمدة من admin3)"
         )
