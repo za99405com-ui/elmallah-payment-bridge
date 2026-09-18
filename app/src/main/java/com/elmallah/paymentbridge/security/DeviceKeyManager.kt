@@ -118,7 +118,7 @@ class DeviceKeyManager(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, value).apply()
 
     var vfCashEnabled: Boolean
-        get() = prefs.getBoolean(KEY_VF_CASH_ENABLED, true)
+        get() = prefs.getBoolean(KEY_VF_CASH_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_VF_CASH_ENABLED, value).apply()
 
     var bankAlAhlyEnabled: Boolean
@@ -158,7 +158,7 @@ class DeviceKeyManager(context: Context) {
         set(value) = prefs.edit().putInt(KEY_LAST_SERVER_STATUS_CODE, value).apply()
 
     var activeRulesCount: Int
-        get() = prefs.getInt(KEY_ACTIVE_RULES_COUNT, 2)
+        get() = prefs.getInt(KEY_ACTIVE_RULES_COUNT, 0)
         set(value) = prefs.edit().putInt(KEY_ACTIVE_RULES_COUNT, value).apply()
 
     var lastDetectedNotification: String?
