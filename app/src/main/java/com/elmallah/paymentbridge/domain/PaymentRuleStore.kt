@@ -129,8 +129,6 @@ class PaymentRuleStore(context: Context) {
             } else {
                 serverRule
             }
-        } + currentDrafts.filter { draft ->
-            authoritative.none { it.id == draft.id }
         }
 
         try {
