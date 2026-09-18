@@ -64,9 +64,11 @@ class BridgeHeartbeatLoop(
                 keyManager.bankAlAhlyEnabled = body.bankAlAhlyEnabled
                 keyManager.lastServerResponse = "HTTP ${response.code()} OK - Online=${body.online}"
 
-                if (body.rules != null && body.rules.isNotEmpty()) {
-                    ruleStore?.updateRules(body.rules)
-                    keyManager.activeRulesCount = body.rules.count { it.enabled }
+                if (body.rules != null) {
+                    // Empty is a valid authoritative snapshot and must clear stale live rules.
+                    val authoritativeRules = body.rules.map { it.toDomain() }
+                    ruleStore?.updateRules(authoritativeRules)
+                    keyManager.activeRulesCount = authoritativeRules.count { it.enabled }
                 } else if (body.activeRulesCount != null) {
                     keyManager.activeRulesCount = body.activeRulesCount
                 }
