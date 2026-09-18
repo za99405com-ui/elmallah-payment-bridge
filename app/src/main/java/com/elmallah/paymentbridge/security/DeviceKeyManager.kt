@@ -2,14 +2,18 @@ package com.elmallah.paymentbridge.security
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.provider.Settings
 import com.elmallah.paymentbridge.BuildConfig
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
 
 class DeviceKeyManager(context: Context) {
 
+    private val appContext: Context = context.applicationContext
+
     private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     companion object {
         private const val PREFS_NAME = "almallah_secure_device_credentials"
@@ -34,7 +38,7 @@ class DeviceKeyManager(context: Context) {
         private const val KEY_LAST_PARSED_AMOUNT_MINOR = "last_parsed_amount_minor"
         private const val KEY_LAST_PARSED_TIME = "last_parsed_time"
 
-        const val DEFAULT_API_BASE_URL = "https://elmallah-admin3.example.com"
+        const val DEFAULT_API_BASE_URL = "https://elmallah-admin3.vercel.app"
         const val THEME_SYSTEM = "SYSTEM"
         const val THEME_LIGHT = "LIGHT"
         const val THEME_DARK = "DARK"
@@ -51,7 +55,23 @@ class DeviceKeyManager(context: Context) {
     private fun ensureDeviceId(): String {
         val existing = prefs.getString(KEY_DEVICE_ID, null)
         if (!existing.isNullOrBlank()) return existing
-        val newId = "pos-almallah-" + UUID.randomUUID().toString().take(12)
+
+        val androidId = Settings.Secure.getString(
+            appContext.contentResolver,
+            Settings.Secure.ANDROID_ID
+        ).orEmpty()
+
+        val suffix = if (androidId.isNotBlank()) {
+            val seed = "$androidId|${appContext.packageName}|almallah-release-v1"
+            MessageDigest.getInstance("SHA-256")
+                .digest(seed.toByteArray(Charsets.UTF_8))
+                .take(6)
+                .joinToString("") { "%02x".format(it) }
+        } else {
+            UUID.randomUUID().toString().replace("-", "").take(12)
+        }
+
+        val newId = "pos-almallah-$suffix"
         prefs.edit().putString(KEY_DEVICE_ID, newId).apply()
         return newId
     }
@@ -63,6 +83,14 @@ class DeviceKeyManager(context: Context) {
         if (!cipher.isNullOrBlank() && !iv.isNullOrBlank()) {
             val decrypted = AndroidKeystoreHelper.decrypt(cipher, iv)
             if (!decrypted.isNullOrBlank()) return decrypted
+
+            if (prefs.getBoolean(KEY_IS_PROVISIONED, false)) {
+                prefs.edit()
+                    .putBoolean(KEY_IS_PROVISIONED, false)
+                    .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
+                    .apply()
+                throw IllegalStateException("Stored HMAC secret could not be decrypted")
+            }
         }
         return ensureDeviceSecret()
     }
@@ -74,14 +102,19 @@ class DeviceKeyManager(context: Context) {
     fun setDeviceSecret(secret: String): Boolean {
         val clean = secret.trim()
         if (clean.length < 32) return false
+
         val encrypted = AndroidKeystoreHelper.encrypt(clean) ?: return false
+        val roundTrip = AndroidKeystoreHelper.decrypt(encrypted.first, encrypted.second)
+        if (roundTrip != clean) return false
+
         prefs.edit()
             .putString(KEY_SECRET_CIPHER, encrypted.first)
             .putString(KEY_SECRET_IV, encrypted.second)
             .putBoolean(KEY_IS_PROVISIONED, true)
             .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, true)
             .apply()
-        return true
+
+        return getDeviceSecret() == clean
     }
 
     var isProvisioned: Boolean
