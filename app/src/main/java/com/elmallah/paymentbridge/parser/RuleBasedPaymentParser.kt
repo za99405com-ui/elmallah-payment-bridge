@@ -29,6 +29,13 @@ class RuleBasedPaymentParser(
         val normalizedText = MessageNormalizer.normalizeForParsing(message.fullText)
         val rawHash = MessageNormalizer.sha256Hex("${message.sourcePackage}:${message.title}:${message.fullText}")
 
+        if (isClearlyOutgoing(normalizedText)) {
+            return PaymentParseResult.Ignored(
+                IgnoreReason.IGNORED_NON_PAYMENT_SENDER,
+                "تم تجاهل إشعار يبدو كعملية صادرة وليس استلام أموال (${rule.name})"
+            )
+        }
+
         // 1. Extract Amount
         val amountMinor = extractAmount(normalizedText)
             ?: return PaymentParseResult.Failed(
@@ -74,6 +81,29 @@ class RuleBasedPaymentParser(
         )
 
         return PaymentParseResult.Success(event)
+    }
+
+    private fun isClearlyOutgoing(text: String): Boolean {
+        val outgoingKeywords = listOf(
+            "خصم", "تم الخصم", "سحب", "تم السحب", "شراء", "مدفوعات",
+            "debited", "withdrawn", "sent to", "paid to"
+        )
+        if (outgoingKeywords.any { text.contains(it, ignoreCase = true) }) return true
+
+        if (text.contains("من حسابكم", ignoreCase = true) || text.contains("من حسابك", ignoreCase = true)) {
+            if (text.contains(" إلى ", ignoreCase = true) || text.contains(" الى ", ignoreCase = true)) return true
+        }
+
+        val merchantRecipient = listOf(
+            "إلى حسابك", "الى حسابك", "لحسابك", "إلى محفظتك", "الى محفظتك"
+        ).any { text.contains(it, ignoreCase = true) }
+
+        val transferToOtherParty = Regex(
+            """(?:تم\s*)?(?:تنفيذ\s*)?تحويل.*(?:\sإلى\s|\sالى\s)""",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(text)
+
+        return transferToOtherParty && !merchantRecipient
     }
 
     private fun extractAmount(text: String): Long? {
