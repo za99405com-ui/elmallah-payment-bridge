@@ -93,7 +93,11 @@ class PaymentRuleStore(context: Context) {
     /**
      * Updates locally cached rules when authoritative rule updates are received from admin3.
      */
-    fun updateRules(newRules: List<PaymentSourceRule>, rulesVersion: String? = null) {
+    fun updateRules(
+        newRules: List<PaymentSourceRule>,
+        rulesVersion: String? = null,
+        acceptedDraftId: String? = null
+    ) {
         hasSyncedWithServer = true
         lastSyncTimestamp = System.currentTimeMillis()
         if (!rulesVersion.isNullOrBlank()) lastRulesVersion = rulesVersion
@@ -106,10 +110,22 @@ class PaymentRuleStore(context: Context) {
         val mergedForUi = authoritative.map { serverRule ->
             val draft = currentDrafts.firstOrNull { it.id == serverRule.id }
             if (draft != null) {
-                draft.copy(
-                    enabled = serverRule.enabled,
-                    isLocalDraft = true
-                )
+                if (acceptedDraftId == serverRule.id) {
+                    // Keep local samples/app label for the setup UX, but mark the
+                    // configuration as server-accepted. LIVE parsing still uses
+                    // the separately persisted authoritative server snapshot.
+                    serverRule.copy(
+                        appName = draft.appName,
+                        sampleMessages = draft.sampleMessages,
+                        lastTestedSuccess = draft.lastTestedSuccess,
+                        isLocalDraft = false
+                    )
+                } else {
+                    draft.copy(
+                        enabled = serverRule.enabled,
+                        isLocalDraft = true
+                    )
+                }
             } else {
                 serverRule
             }
