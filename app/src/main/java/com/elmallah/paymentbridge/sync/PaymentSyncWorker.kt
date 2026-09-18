@@ -54,7 +54,8 @@ class PaymentSyncWorker(
                 parserVersion = event.parserVersion,
                 parseConfidence = event.parseConfidence,
                 rawMessageHash = event.rawMessageHash,
-                deviceId = event.deviceId
+                deviceId = event.deviceId,
+                paymentSourceId = event.paymentSourceId
             )
 
             try {
