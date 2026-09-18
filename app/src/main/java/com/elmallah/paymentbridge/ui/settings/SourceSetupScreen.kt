@@ -96,7 +96,7 @@ fun SourceSetupScreen(
         if (showApps) {
             installedApps = InstalledAppHelper.getInstalledApps(
                 context = context,
-                showAllApps = true,
+                showAll = true,
                 searchQuery = appSearch
             )
         }
