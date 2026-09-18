@@ -78,6 +78,57 @@ class DynamicPaymentRulesTest {
     }
 
     @Test
+    fun testTwoLogicalSourcesCanShareTheSameMessagesApp() {
+        val packageName = "com.samsung.android.messaging"
+        val vodafone = PaymentSourceRule(
+            id = "source-vf",
+            code = "vf_cash",
+            name = "فودافون كاش",
+            paymentChannel = "WALLET",
+            packageNames = listOf(packageName),
+            senderFilters = emptyList(),
+            bodyContains = listOf("تم استلام"),
+            enabled = true
+        )
+        val instaPay = PaymentSourceRule(
+            id = "source-ip",
+            code = "instapay",
+            name = "إنستا باي",
+            paymentChannel = "INSTAPAY",
+            packageNames = listOf(packageName),
+            senderFilters = emptyList(),
+            bodyContains = listOf("تم إضافة تحويل لحظي"),
+            enabled = true
+        )
+
+        val rules = listOf(vodafone, instaPay)
+
+        val incomingInstaPay = RawNotificationMessage(
+            sourcePackage = packageName,
+            title = "Bank-AlAhly",
+            text = "تم إضافة تحويل لحظي لحسابكم رقم 0130 بمبلغ 100.00 جم من عميل رقم مرجعي 796672024850 يوم 18-09 الساعة 22:13",
+            postedAtMillis = System.currentTimeMillis()
+        )
+
+        val validation = TrustedNotificationSourcePolicy.validateSource(
+            sourcePackage = packageName,
+            senderTitle = incomingInstaPay.title,
+            rules = rules,
+            bodyText = incomingInstaPay.fullText
+        )
+        assertTrue(validation is SourceValidationResult.Accepted)
+        assertEquals("source-ip", (validation as SourceValidationResult.Accepted).provider)
+
+        val result = CompositePaymentParser(ruleSupplier = { rules })
+            .parseLiveMessage(incomingInstaPay, "device-test")
+        assertTrue(result is PaymentParseResult.Success)
+        val event = (result as PaymentParseResult.Success).event
+        assertEquals("source-ip", event.paymentSourceId)
+        assertEquals(10000L, event.amountMinor)
+        assertEquals("796672024850", event.transactionReference)
+    }
+
+    @Test
     fun testDisabledDynamicRuleRejection() {
         val disabledRule = PaymentSourceRule(
             id = "DISABLED_PROVIDER",
