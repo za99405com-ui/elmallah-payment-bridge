@@ -299,7 +299,7 @@ fun SourceSetupScreen(
                                     }
                                     Text(
                                         if (result.success)
-                                            "المبلغ المقروء: \${result.formattedAmount ?: "تم التعرف عليه"}"
+                                            "المبلغ المقروء: ${result.formattedAmount ?: "تم التعرف عليه"}"
                                         else result.statusMessage,
                                         style = MaterialTheme.typography.bodySmall
                                     )
