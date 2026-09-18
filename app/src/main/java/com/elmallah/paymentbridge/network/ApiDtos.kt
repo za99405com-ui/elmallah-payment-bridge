@@ -77,6 +77,7 @@ data class PaymentSourceRuleDto(
 ) {
     fun toDomain(): PaymentSourceRule = PaymentSourceRule(
         id = id,
+        code = code,
         name = name.ifBlank { code ?: id },
         enabled = enabled,
         paymentChannel = channel,
