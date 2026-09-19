@@ -27,6 +27,13 @@ object TrustedNotificationSourcePolicy {
     const val SENDER_VODAFONE_CASH = "VF-Cash"
     const val SENDER_NBE = "Bank-AlAhly"
 
+    private fun normalizeSenderTitle(value: String): String {
+        return value
+            .replace(Regex("""\p{Cf}+"""), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+    }
+
     fun validateSource(
         sourcePackage: String,
         senderTitle: String,
@@ -34,7 +41,7 @@ object TrustedNotificationSourcePolicy {
         bodyText: String = ""
     ): SourceValidationResult {
         val trimmedPackage = sourcePackage.trim()
-        val normalizedTitle = senderTitle.trim()
+        val normalizedTitle = normalizeSenderTitle(senderTitle)
 
         // 1. Check if package is trusted
         val isAllowedPackage = TRUSTED_MESSAGING_PACKAGES.contains(trimmedPackage) ||
@@ -51,7 +58,7 @@ object TrustedNotificationSourcePolicy {
             val pkgMatch = rule.packageNames.isEmpty() ||
                 rule.packageNames.any { it.equals(trimmedPackage, ignoreCase = true) }
             val senderMatch = rule.senderFilters.isEmpty() ||
-                rule.senderFilters.any { it.equals(normalizedTitle, ignoreCase = true) }
+                rule.senderFilters.any { normalizeSenderTitle(it).equals(normalizedTitle, ignoreCase = true) }
             val bodyMatch = bodyText.isBlank() ||
                 rule.bodyContains.isNullOrEmpty() ||
                 rule.bodyContains.any { bodyText.contains(it, ignoreCase = true) }
