@@ -106,7 +106,14 @@ class BridgeHeartbeatLoop(
                 true
             } else {
                 keyManager.lastServerResponse = "HTTP ${response.code()}: ${response.message()}"
-                Log.w(TAG, "Heartbeat rejected: HTTP ${response.code()}")
+                if (response.code() == 401) {
+                    keyManager.invalidateProvisioning(
+                        "فشل توثيق HMAC. أعد ربط الجهاز من الإعدادات."
+                    )
+                    Log.w(TAG, "Heartbeat authentication rejected. Provisioning invalidated.")
+                } else {
+                    Log.w(TAG, "Heartbeat rejected: HTTP ${response.code()}")
+                }
                 false
             }
         } catch (e: Exception) {
