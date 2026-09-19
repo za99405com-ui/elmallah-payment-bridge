@@ -71,7 +71,7 @@ class PaymentNotificationListener : NotificationListenerService() {
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
 
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val directText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
 
@@ -79,29 +79,41 @@ class PaymentNotificationListener : NotificationListenerService() {
             ?.filterNotNull()
             ?.map { it.toString().trim() }
             ?.filter { it.isNotEmpty() }
-            ?.joinToString("\n")
+            ?: emptyList()
 
-        val messagingStyleText = try {
+        val messagingCandidates = try {
             @Suppress("DEPRECATION")
-            extras.getParcelableArray(Notification.EXTRA_MESSAGES)?.mapNotNull { item ->
-                if (item is Bundle) item.getCharSequence("text")?.toString()?.trim() else null
-            }?.filter { it.isNotEmpty() }?.joinToString("\n")
+            extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+                ?.mapIndexedNotNull { index, item ->
+                    if (item !is Bundle) return@mapIndexedNotNull null
+                    val body = item.getCharSequence("text")?.toString()?.trim().orEmpty()
+                    if (body.isBlank()) return@mapIndexedNotNull null
+
+                    val timestamp = item.getLong("time", 0L).takeIf { it > 0L }
+                    NotificationMessageCandidate(
+                        text = body,
+                        timestamp = timestamp,
+                        order = index
+                    )
+                }
+                ?: emptyList()
         } catch (_: Exception) {
-            null
+            emptyList()
         }
 
-        val resolvedBigText = when {
-            !bigText.isNullOrBlank() -> bigText
-            !messagingStyleText.isNullOrBlank() -> messagingStyleText
-            !textLines.isNullOrBlank() -> textLines
-            else -> null
-        }
+        val latestBody = NotificationTextResolver.resolveLatest(
+            messagingCandidates = messagingCandidates,
+            directText = directText,
+            textLines = textLines,
+            bigText = bigText
+        )
+        if (latestBody.isBlank()) return
 
         val rawMessage = RawNotificationMessage(
             sourcePackage = sourcePackage,
             title = title,
-            text = text,
-            bigText = resolvedBigText,
+            text = latestBody,
+            bigText = null,
             subText = subText,
             postedAtMillis = sbn.postTime
         )
@@ -117,7 +129,7 @@ class PaymentNotificationListener : NotificationListenerService() {
             packageName = sourcePackage,
             appName = friendlyAppName,
             title = title,
-            body = resolvedBigText ?: text,
+            body = latestBody,
             timestamp = sbn.postTime
         )
 
