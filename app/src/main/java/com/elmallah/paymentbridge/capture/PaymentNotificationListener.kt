@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
@@ -56,6 +57,18 @@ class PaymentNotificationListener : NotificationListenerService() {
         serviceScope.launch {
             app.ruleStore.rulesFlow.collectLatest {
                 retryRecentlyRejectedNotifications(app)
+            }
+        }
+
+        serviceScope.launch {
+            delay(750)
+            val now = System.currentTimeMillis()
+            try {
+                activeNotifications
+                    ?.filter { now - it.postTime in 0..REJECTED_RETRY_WINDOW_MS }
+                    ?.forEach { onNotificationPosted(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not rescan recent active notifications.", e)
             }
         }
 
