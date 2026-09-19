@@ -37,6 +37,8 @@ class DeviceKeyManager(context: Context) {
         private const val KEY_LAST_DETECTED_NOTIFICATION = "last_detected_notification"
         private const val KEY_LAST_PARSED_AMOUNT_MINOR = "last_parsed_amount_minor"
         private const val KEY_LAST_PARSED_TIME = "last_parsed_time"
+        private const val KEY_PROVISIONING_SCHEMA_VERSION = "provisioning_schema_version"
+        private const val CURRENT_PROVISIONING_SCHEMA_VERSION = 1
 
         const val DEFAULT_API_BASE_URL = "https://elmallah-admin3.vercel.app"
         const val THEME_SYSTEM = "SYSTEM"
@@ -46,11 +48,31 @@ class DeviceKeyManager(context: Context) {
 
     init {
         ensureDeviceId()
-        ensureDeviceSecret()
+        migrateProvisioningState()
     }
 
     val deviceId: String
         get() = prefs.getString(KEY_DEVICE_ID, null) ?: ensureDeviceId()
+
+    private fun migrateProvisioningState() {
+        val currentVersion = prefs.getInt(KEY_PROVISIONING_SCHEMA_VERSION, 0)
+        val wasProvisioned = prefs.getBoolean(KEY_IS_PROVISIONED, false)
+
+        // v1.2.0/v1.2.1 generated a fresh local secret every time the app process
+        // was recreated. Existing installs therefore need one explicit re-link.
+        // Once v1 provisioning is written, future app restarts/updates never rotate it.
+        if (wasProvisioned && currentVersion < CURRENT_PROVISIONING_SCHEMA_VERSION) {
+            prefs.edit()
+                .putBoolean(KEY_IS_PROVISIONED, false)
+                .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
+                .putString(
+                    KEY_LAST_SERVER_RESPONSE,
+                    "يلزم إعادة ربط HMAC مرة واحدة بعد تحديث حماية المفتاح"
+                )
+                .apply()
+        }
+    }
+
 
     private fun ensureDeviceId(): String {
         val existing = prefs.getString(KEY_DEVICE_ID, null)
@@ -112,6 +134,7 @@ class DeviceKeyManager(context: Context) {
             .putString(KEY_SECRET_IV, encrypted.second)
             .putBoolean(KEY_IS_PROVISIONED, true)
             .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, true)
+            .putInt(KEY_PROVISIONING_SCHEMA_VERSION, CURRENT_PROVISIONING_SCHEMA_VERSION)
             .apply()
 
         return getDeviceSecret() == clean
@@ -122,7 +145,24 @@ class DeviceKeyManager(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_IS_PROVISIONED, value).apply()
 
     private fun ensureDeviceSecret(): String {
-        // Bootstrap-only fallback random secret.
+        val existingCipher = prefs.getString(KEY_SECRET_CIPHER, null)
+        val existingIv = prefs.getString(KEY_SECRET_IV, null)
+
+        if (!existingCipher.isNullOrBlank() && !existingIv.isNullOrBlank()) {
+            val existingSecret = AndroidKeystoreHelper.decrypt(existingCipher, existingIv)
+            if (!existingSecret.isNullOrBlank()) return existingSecret
+
+            if (prefs.getBoolean(KEY_IS_PROVISIONED, false)) {
+                prefs.edit()
+                    .putBoolean(KEY_IS_PROVISIONED, false)
+                    .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
+                    .apply()
+                throw IllegalStateException("Stored HMAC secret could not be decrypted")
+            }
+        }
+
+        // Bootstrap-only fallback. This is created only when no usable local
+        // secret exists; it is never regenerated merely because the app restarted.
         val randomBytes = ByteArray(32)
         SecureRandom().nextBytes(randomBytes)
         val generated = randomBytes.joinToString("") { "%02x".format(it) }
@@ -134,6 +174,16 @@ class DeviceKeyManager(context: Context) {
                 .apply()
         }
         return generated
+    }
+
+    fun invalidateProvisioning(reason: String? = null) {
+        prefs.edit()
+            .putBoolean(KEY_IS_PROVISIONED, false)
+            .putBoolean(KEY_BRIDGE_UPLOAD_ENABLED, false)
+            .apply()
+        if (!reason.isNullOrBlank()) {
+            lastServerResponse = reason
+        }
     }
 
     var apiBaseUrl: String

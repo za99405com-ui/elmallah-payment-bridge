@@ -257,16 +257,43 @@ class SettingsViewModel(
 
     fun provisionSecret(secret: String): Boolean {
         val success = keyManager.setDeviceSecret(secret)
-        provisioningStatus.value = if (success) {
-            keyManager.bridgeUploadEnabled = true
-            bridgeUploadEnabled.value = true
-            isProvisioned.value = true
-            appContext?.let { BridgeForegroundService.start(it) }
-            "تم حفظ مفتاح HMAC داخل Android Keystore وتشغيل خدمة الخلفية."
-        } else {
-            "مفتاح التهيئة غير صالح. يجب أن يكون 32 حرفاً على الأقل."
+        if (!success) {
+            provisioningStatus.value = "مفتاح التهيئة غير صالح. يجب أن يكون 32 حرفاً على الأقل."
+            return false
         }
-        return success
+
+        keyManager.bridgeUploadEnabled = true
+        bridgeUploadEnabled.value = true
+        isProvisioned.value = true
+        provisioningStatus.value = "تم حفظ المفتاح. جارٍ التحقق منه مع admin3..."
+
+        viewModelScope.launch {
+            try {
+                val response = ApiClientProvider(keyManager).getApi().fetchPaymentRules()
+                val body = response.body()
+                if (response.isSuccessful && body != null) {
+                    val authoritativeRules = body.rules.map { it.toDomain() }
+                    ruleStore?.updateRules(authoritativeRules, body.rulesVersion)
+                    keyManager.activeRulesCount = authoritativeRules.size
+                    appContext?.let { BridgeForegroundService.start(it) }
+                    provisioningStatus.value = "تم ربط الجهاز والتحقق من HMAC بنجاح."
+                } else {
+                    keyManager.invalidateProvisioning("HTTP ${response.code()}: HMAC verification failed")
+                    bridgeUploadEnabled.value = false
+                    isProvisioned.value = false
+                    provisioningStatus.value =
+                        if (response.code() == 401) "مفتاح HMAC غير مطابق للسيرفر. أعد إدخال المفتاح الصحيح."
+                        else "تم حفظ المفتاح محلياً لكن تعذر التحقق منه: HTTP ${response.code()}"
+                }
+            } catch (e: Exception) {
+                keyManager.invalidateProvisioning("HMAC verification error")
+                bridgeUploadEnabled.value = false
+                isProvisioned.value = false
+                provisioningStatus.value =
+                    "تعذر التحقق من المفتاح: ${e.localizedMessage ?: e.javaClass.simpleName}"
+            }
+        }
+        return true
     }
 
     fun toggleRawDiagnostics(enabled: Boolean) {
