@@ -96,8 +96,8 @@ class PaymentNotificationListener : NotificationListenerService() {
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
 
-        val directText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+        val directText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
 
         val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
@@ -126,55 +126,86 @@ class PaymentNotificationListener : NotificationListenerService() {
             emptyList()
         }
 
-        val latestBody = NotificationTextResolver.resolveLatest(
-            messagingCandidates = messagingCandidates,
-            directText = directText,
-            textLines = textLines,
-            bigText = bigText
-        )
-        if (latestBody.isBlank()) return
+        // Samsung Messages may group the outgoing and incoming bank SMS in one
+        // notification. Parse every recent message independently instead of choosing
+        // one body and accidentally discarding the incoming receipt.
+        val newestStructuredTime = messagingCandidates.mapNotNull { it.timestamp }.maxOrNull()
+        val recentStructured = messagingCandidates
+            .filter { candidate ->
+                val ts = candidate.timestamp
+                newestStructuredTime == null || ts == null || ts >= newestStructuredTime - 2 * 60_000L
+            }
+            .sortedWith(
+                compareBy<NotificationMessageCandidate> { it.timestamp ?: Long.MIN_VALUE }
+                    .thenBy { it.order }
+            )
+            .takeLast(6)
 
-        val rawMessage = RawNotificationMessage(
-            sourcePackage = sourcePackage,
-            title = title,
-            text = latestBody,
-            bigText = null,
-            subText = subText,
-            postedAtMillis = sbn.postTime
-        )
+        val allCandidates = buildList {
+            addAll(recentStructured)
+            if (!directText.isNullOrBlank()) {
+                add(NotificationMessageCandidate(directText, sbn.postTime, Int.MAX_VALUE - 2))
+            }
+            textLines.takeLast(3).forEachIndexed { index, line ->
+                add(NotificationMessageCandidate(line, sbn.postTime, Int.MAX_VALUE - 10 + index))
+            }
+            if (!bigText.isNullOrBlank()) {
+                add(NotificationMessageCandidate(bigText, sbn.postTime, Int.MAX_VALUE))
+            }
+        }
+            .filter { it.text.isNotBlank() }
+            .distinctBy {
+                it.text
+                    .replace(Regex("""[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]"""), "")
+                    .replace(Regex("""\s+"""), " ")
+                    .trim()
+            }
 
-        // Record locally for guided setup sample selection and message testing
+        if (allCandidates.isEmpty()) return
+
         val friendlyAppName = try {
             val appInfo = packageManager.getApplicationInfo(sourcePackage, 0)
             packageManager.getApplicationLabel(appInfo).toString()
         } catch (_: Exception) {
             title.ifBlank { sourcePackage }
         }
-        RecentNotificationStore.addNotification(
-            packageName = sourcePackage,
-            appName = friendlyAppName,
-            title = title,
-            body = latestBody,
-            timestamp = sbn.postTime
-        )
 
-        val app = application as? AlMallahBridgeApp
-        val activeRules = app?.ruleStore?.getActiveRules() ?: emptyList()
+        val app = application as? AlMallahBridgeApp ?: return
+        val activeRules = app.ruleStore.getActiveRules()
 
-        val sourceValidation = TrustedNotificationSourcePolicy.validateSource(
-            sourcePackage,
-            title,
-            activeRules,
-            rawMessage.fullText
-        )
-        if (sourceValidation is SourceValidationResult.Rejected) {
-            rememberRejectedNotification(rawMessage)
-            Log.d(TAG, "Notification held for rule retry: ${sourceValidation.reason}")
-            return
+        allCandidates.forEach { candidate ->
+            val rawMessage = RawNotificationMessage(
+                sourcePackage = sourcePackage,
+                title = title,
+                text = candidate.text,
+                bigText = null,
+                subText = subText,
+                postedAtMillis = candidate.timestamp ?: sbn.postTime
+            )
+
+            RecentNotificationStore.addNotification(
+                packageName = sourcePackage,
+                appName = friendlyAppName,
+                title = title,
+                body = candidate.text,
+                timestamp = rawMessage.postedAtMillis
+            )
+
+            val sourceValidation = TrustedNotificationSourcePolicy.validateSource(
+                sourcePackage,
+                title,
+                activeRules,
+                rawMessage.fullText
+            )
+
+            if (sourceValidation is SourceValidationResult.Rejected) {
+                rememberRejectedNotification(rawMessage)
+                Log.d(TAG, "Grouped SMS candidate held for retry: ${sourceValidation.reason}")
+            } else {
+                pendingRejectedNotifications.remove(notificationKey(rawMessage))
+                serviceScope.launch { processNotification(rawMessage) }
+            }
         }
-
-        pendingRejectedNotifications.remove(notificationKey(rawMessage))
-        serviceScope.launch { processNotification(rawMessage) }
     }
 
     private fun notificationKey(message: RawNotificationMessage): String {
