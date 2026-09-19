@@ -41,16 +41,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.elmallah.paymentbridge.capture.CapturedNotification
+import com.elmallah.paymentbridge.capture.PaymentMessageDirection
 import com.elmallah.paymentbridge.capture.RecentNotificationStore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentNotificationPickerSheet(
     sheetState: SheetState,
+    sourceCode: String? = null,
     onDismiss: () -> Unit,
     onSelectNotification: (CapturedNotification) -> Unit
 ) {
     val recentList by RecentNotificationStore.notificationsFlow.collectAsState()
+    val visibleList = recentList.filter {
+        PaymentMessageDirection.looksLikeIncomingForSource(sourceCode, it.body)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -94,7 +99,7 @@ fun RecentNotificationPickerSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            if (recentList.isEmpty()) {
+            if (visibleList.isEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -107,7 +112,7 @@ fun RecentNotificationPickerSheet(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "لا توجد إشعارات مسجلة حديثاً على الجهاز.",
+                            text = "لا توجد رسائل دفع واردة مناسبة مسجلة حديثاً.",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
@@ -126,7 +131,7 @@ fun RecentNotificationPickerSheet(
                         .heightIn(max = 420.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(recentList, key = { it.id }) { notif ->
+                    items(visibleList, key = { it.id }) { notif ->
                         RecentNotificationItemCard(
                             notification = notif,
                             onSelect = {
