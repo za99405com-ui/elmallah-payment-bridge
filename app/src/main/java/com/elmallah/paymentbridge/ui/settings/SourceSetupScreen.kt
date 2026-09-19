@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.elmallah.paymentbridge.capture.PaymentMessageDirection
 import com.elmallah.paymentbridge.domain.PaymentMessageSample
 import com.elmallah.paymentbridge.domain.PaymentSourceRule
 import com.elmallah.paymentbridge.parser.AutoRuleGenerator
@@ -102,8 +103,12 @@ fun SourceSetupScreen(
         }
     }
 
-    val analysis = remember(messageBody, senderTitle) {
-        if (messageBody.isBlank()) null
+    val outgoingSample = remember(messageBody) {
+        messageBody.isNotBlank() && PaymentMessageDirection.isClearlyOutgoing(messageBody)
+    }
+
+    val analysis = remember(messageBody, senderTitle, outgoingSample) {
+        if (messageBody.isBlank() || outgoingSample) null
         else AutoRuleGenerator.analyzeSample(senderTitle, messageBody)
     }
 
@@ -274,6 +279,30 @@ fun SourceSetupScreen(
                             shape = RoundedCornerShape(12.dp)
                         )
 
+                        if (outgoingSample) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        "دي رسالة تحويل صادر وليست رسالة استلام",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Text(
+                                        "اختَر الرسالة التي تبدأ بـ «تم إضافة تحويل...» أو رسالة استلام واردة. لن يسمح التطبيق بحفظ رسالة صادرة كنموذج دفع.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+
                         analysis?.let { result ->
                             Spacer(modifier = Modifier.height(10.dp))
                             Card(
@@ -348,7 +377,10 @@ fun SourceSetupScreen(
                             )
                         )
                     },
-                    enabled = selectedPackage.isNotBlank() && messageBody.isNotBlank() && analysis?.success == true,
+                    enabled = selectedPackage.isNotBlank() &&
+                        messageBody.isNotBlank() &&
+                        !outgoingSample &&
+                        analysis?.success == true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp)
                 ) {
@@ -371,6 +403,7 @@ fun SourceSetupScreen(
     if (showRecentSheet) {
         RecentNotificationPickerSheet(
             sheetState = sheetState,
+            sourceCode = logicalCode,
             onDismiss = { showRecentSheet = false },
             onSelectNotification = { picked ->
                 selectedPackage = picked.packageName

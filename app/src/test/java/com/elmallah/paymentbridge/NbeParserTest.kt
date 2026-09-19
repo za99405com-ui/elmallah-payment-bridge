@@ -45,6 +45,25 @@ class NbeParserTest {
     }
 
     @Test
+    fun testParseActualNbeInstantTransferFormat() {
+        val body = "تم إضافة تحويل لحظي لحسابكم رقم 0130 بمبلغ 100.00 جم من زياد معتز بالله السيد قاسم الملاح رقم مرجعي 955126971885 يوم 19-09 الساعة 09:28 للمزيد اتصل ب 19623"
+        val raw = RawNotificationMessage(
+            sourcePackage = "com.samsung.android.messaging",
+            title = "Bank-AlAhly",
+            text = body,
+            postedAtMillis = System.currentTimeMillis()
+        )
+
+        val result = parser.parse(raw, "device-pos-actual")
+        assertTrue(result is PaymentParseResult.Success)
+
+        val event = (result as PaymentParseResult.Success).event
+        assertEquals(10000L, event.amountMinor)
+        assertEquals("0130", event.accountLast4)
+        assertEquals("955126971885", event.transactionReference)
+    }
+
+    @Test
     fun testIgnoreNbeOutgoingTransfer() {
         val body = "تم تنفيذ تحويل لحظي من حسابكم رقم 0130 بمبلغ 180.00 جم إلى محفظة فودافون كاش رقم مرجعي 643086325070"
         val raw = RawNotificationMessage(
