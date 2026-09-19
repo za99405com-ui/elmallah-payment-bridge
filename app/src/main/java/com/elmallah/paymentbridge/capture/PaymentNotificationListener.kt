@@ -17,16 +17,22 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 class PaymentNotificationListener : NotificationListenerService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var parser: CompositePaymentParser? = null
     private var heartbeatLoop: BridgeHeartbeatLoop? = null
+    private val pendingRejectedNotifications = ConcurrentHashMap<String, RawNotificationMessage>()
 
     companion object {
         private const val TAG = "PaymentBridgeListener"
+        private const val REJECTED_RETRY_WINDOW_MS = 5 * 60_000L
+        private const val MAX_PENDING_REJECTED = 20
+
         @Volatile
         var isConnected: Boolean = false
     }
@@ -46,6 +52,12 @@ class PaymentNotificationListener : NotificationListenerService() {
             apiProvider = app.apiProvider,
             ruleStore = app.ruleStore
         ).also { loop -> loop.start { isConnected } }
+
+        serviceScope.launch {
+            app.ruleStore.rulesFlow.collectLatest {
+                retryRecentlyRejectedNotifications(app)
+            }
+        }
 
         BridgeSyncCoordinator.enqueueImmediate(applicationContext)
     }
@@ -142,9 +154,60 @@ class PaymentNotificationListener : NotificationListenerService() {
             activeRules,
             rawMessage.fullText
         )
-        if (sourceValidation is SourceValidationResult.Rejected) return
+        if (sourceValidation is SourceValidationResult.Rejected) {
+            rememberRejectedNotification(rawMessage)
+            Log.d(TAG, "Notification held for rule retry: ${sourceValidation.reason}")
+            return
+        }
 
+        pendingRejectedNotifications.remove(notificationKey(rawMessage))
         serviceScope.launch { processNotification(rawMessage) }
+    }
+
+    private fun notificationKey(message: RawNotificationMessage): String {
+        return "${message.sourcePackage}|${message.postedAtMillis}|${message.title}|${message.text.hashCode()}"
+    }
+
+    private fun rememberRejectedNotification(message: RawNotificationMessage) {
+        val now = System.currentTimeMillis()
+        pendingRejectedNotifications.entries.removeIf {
+            now - it.value.postedAtMillis > REJECTED_RETRY_WINDOW_MS
+        }
+
+        if (pendingRejectedNotifications.size >= MAX_PENDING_REJECTED) {
+            val oldest = pendingRejectedNotifications.entries.minByOrNull { it.value.postedAtMillis }
+            if (oldest != null) pendingRejectedNotifications.remove(oldest.key)
+        }
+
+        pendingRejectedNotifications[notificationKey(message)] = message
+    }
+
+    private suspend fun retryRecentlyRejectedNotifications(app: AlMallahBridgeApp) {
+        if (pendingRejectedNotifications.isEmpty()) return
+
+        val now = System.currentTimeMillis()
+        val activeRules = app.ruleStore.getActiveRules()
+        val snapshot = pendingRejectedNotifications.entries.toList()
+
+        for ((key, message) in snapshot) {
+            if (now - message.postedAtMillis > REJECTED_RETRY_WINDOW_MS) {
+                pendingRejectedNotifications.remove(key)
+                continue
+            }
+
+            val validation = TrustedNotificationSourcePolicy.validateSource(
+                message.sourcePackage,
+                message.title,
+                activeRules,
+                message.fullText
+            )
+
+            if (validation is SourceValidationResult.Accepted) {
+                pendingRejectedNotifications.remove(key)
+                Log.i(TAG, "Retrying notification after authoritative rule refresh.")
+                processNotification(message)
+            }
+        }
     }
 
     private suspend fun processNotification(rawMessage: RawNotificationMessage) {
@@ -200,6 +263,7 @@ class PaymentNotificationListener : NotificationListenerService() {
     override fun onDestroy() {
         heartbeatLoop?.stop()
         heartbeatLoop = null
+        pendingRejectedNotifications.clear()
         isConnected = false
         serviceScope.cancel()
         super.onDestroy()
