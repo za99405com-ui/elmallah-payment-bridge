@@ -34,6 +34,14 @@ object TrustedNotificationSourcePolicy {
             .trim()
     }
 
+    private fun normalizeBodyText(value: String): String {
+        return value
+            .replace(Regex("""[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]"""), "")
+            .replace('\u00A0', ' ')
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+    }
+
     fun validateSource(
         sourcePackage: String,
         senderTitle: String,
@@ -42,6 +50,7 @@ object TrustedNotificationSourcePolicy {
     ): SourceValidationResult {
         val trimmedPackage = sourcePackage.trim()
         val normalizedTitle = normalizeSenderTitle(senderTitle)
+        val normalizedBody = normalizeBodyText(bodyText)
 
         // 1. Check if package is trusted
         val isAllowedPackage = TRUSTED_MESSAGING_PACKAGES.contains(trimmedPackage) ||
@@ -59,9 +68,11 @@ object TrustedNotificationSourcePolicy {
                 rule.packageNames.any { it.equals(trimmedPackage, ignoreCase = true) }
             val senderMatch = rule.senderFilters.isEmpty() ||
                 rule.senderFilters.any { normalizeSenderTitle(it).equals(normalizedTitle, ignoreCase = true) }
-            val bodyMatch = bodyText.isBlank() ||
+            val bodyMatch = normalizedBody.isBlank() ||
                 rule.bodyContains.isNullOrEmpty() ||
-                rule.bodyContains.any { bodyText.contains(it, ignoreCase = true) }
+                rule.bodyContains.any { token ->
+                    normalizedBody.contains(normalizeBodyText(token), ignoreCase = true)
+                }
             pkgMatch && senderMatch && bodyMatch
         }
 

@@ -31,4 +31,33 @@ class TrustedNotificationSourcePolicyTest {
 
         assertTrue(result is SourceValidationResult.Accepted)
     }
+
+    @Test
+    fun directionalMarksDoNotBreakIncomingBodyMatching() {
+        val rule = PaymentSourceRule(
+            id = "instapay-rule",
+            code = "instapay",
+            name = "إنستا باي",
+            enabled = true,
+            paymentChannel = "INSTAPAY",
+            packageNames = listOf("com.samsung.android.messaging"),
+            senderFilters = listOf("Bank-AlAhly"),
+            bodyContains = listOf("تم إضافة تحويل لحظي")
+        )
+
+        val mark = 0x200F.toChar()
+        val isolateStart = 0x2068.toChar()
+        val isolateEnd = 0x2069.toChar()
+        val body = "تم" + mark + " إضافة تحويل" + isolateStart + " لحظي" + isolateEnd +
+            " لحسابكم رقم 0130 بمبلغ 50.00 جم"
+
+        val result = TrustedNotificationSourcePolicy.validateSource(
+            sourcePackage = "com.samsung.android.messaging",
+            senderTitle = "Bank-AlAhly",
+            rules = listOf(rule),
+            bodyText = body
+        )
+
+        assertTrue(result is SourceValidationResult.Accepted)
+    }
 }
