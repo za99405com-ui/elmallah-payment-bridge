@@ -14,7 +14,7 @@ class NbeIncomingTransferParser : PaymentMessageParser {
 
     // Handles both teh marbuta (ة) and heh (ه) and both hamza variants (إ / ا)
     private val incomingPattern = Regex(
-        "تم\\s+[إا]ضاف[ةه]\\s+تحويل(?:\\s+لحظي)?[\\s\\S]{0,100}?(?:بمبلغ|مبلغ)\\s*([0-9.,\\u066B\\u066C]+)\\s*(?:EGP|جم|جنيه)?",
+        "تم\\s+[إا]ضاف[ةه]\\s+تحويل(?:\\s+لحظي)?[\\s\\S]{0,100}?(?:(?:بمبلغ|مبلغ)\\s*)?([0-9.,\\u066B\\u066C]+)\\s*(?:EGP|جم|جنيه)",
         RegexOption.IGNORE_CASE
     )
 
