@@ -46,6 +46,22 @@ data class HeartbeatRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class ActivePaymentOrderDto(
+    @Json(name = "sessionId") val sessionId: String,
+    @Json(name = "orderId") val orderId: String,
+    @Json(name = "orderNumber") val orderNumber: String,
+    @Json(name = "orderStatus") val orderStatus: String = "pending",
+    @Json(name = "paymentState") val paymentState: String = "waiting",
+    @Json(name = "expectedAmount") val expectedAmount: Double,
+    @Json(name = "currency") val currency: String = "EGP",
+    @Json(name = "provider") val provider: String,
+    @Json(name = "paymentIntent") val paymentIntent: String = "deposit",
+    @Json(name = "expiresAt") val expiresAt: String,
+    @Json(name = "customerName") val customerName: String? = null,
+    @Json(name = "customerPhone") val customerPhone: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class HeartbeatResponse(
     @Json(name = "status") val status: String,
     @Json(name = "online") val online: Boolean,
@@ -55,6 +71,7 @@ data class HeartbeatResponse(
     @Json(name = "bankAlAhlyEnabled") val bankAlAhlyEnabled: Boolean = false,
     @Json(name = "serverTime") val serverTime: Long,
     @Json(name = "activeRulesCount") val activeRulesCount: Int? = null,
+    @Json(name = "activeOrders") val activeOrders: List<ActivePaymentOrderDto> = emptyList(),
     @Json(name = "rulesVersion") val rulesVersion: String? = null,
     @Json(name = "rules") val rules: List<PaymentSourceRuleDto>? = null
 )

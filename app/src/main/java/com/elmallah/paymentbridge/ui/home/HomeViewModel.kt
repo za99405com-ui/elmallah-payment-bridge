@@ -12,6 +12,7 @@ import com.elmallah.paymentbridge.domain.PaymentRuleStore
 import com.elmallah.paymentbridge.network.ApiClientProvider
 import com.elmallah.paymentbridge.security.DeviceKeyManager
 import com.elmallah.paymentbridge.sync.BridgeForegroundService
+import com.elmallah.paymentbridge.sync.BridgeRuntimeState
 import com.elmallah.paymentbridge.sync.BridgeSyncCoordinator
 import com.elmallah.paymentbridge.sync.NetworkConnectivityMonitor
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +92,8 @@ class HomeViewModel(
 
     val lastEvent: StateFlow<PaymentEventEntity?> = repository.getLastEvent()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val activePaymentOrders = BridgeRuntimeState.activePaymentOrders
 
     private val _isServerVerified = MutableStateFlow(false)
     val isServerVerified: StateFlow<Boolean> = _isServerVerified.asStateFlow()
