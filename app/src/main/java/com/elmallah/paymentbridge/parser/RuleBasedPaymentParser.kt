@@ -17,9 +17,9 @@ class RuleBasedPaymentParser(
     override val supportedSenders: List<String> = rule.senderFilters
 
     override fun canHandle(message: RawNotificationMessage): Boolean {
-        val cleanSender = message.title.trim()
+        val cleanSender = normalizeSenderTitle(message.title)
         val senderMatches = rule.senderFilters.isEmpty() ||
-            rule.senderFilters.any { it.equals(cleanSender, ignoreCase = true) }
+            rule.senderFilters.any { normalizeSenderTitle(it).equals(cleanSender, ignoreCase = true) }
         val packageMatches = rule.packageNames.isEmpty() ||
             rule.packageNames.any { it.equals(message.sourcePackage.trim(), ignoreCase = true) }
         return senderMatches && packageMatches
@@ -81,6 +81,13 @@ class RuleBasedPaymentParser(
         )
 
         return PaymentParseResult.Success(event)
+    }
+
+    private fun normalizeSenderTitle(value: String): String {
+        return value
+            .replace(Regex("""\p{Cf}+"""), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
     }
 
     private fun isClearlyOutgoing(text: String): Boolean {
