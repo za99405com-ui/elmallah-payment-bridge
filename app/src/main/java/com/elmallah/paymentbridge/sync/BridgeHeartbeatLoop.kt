@@ -59,6 +59,7 @@ class BridgeHeartbeatLoop(
                 keyManager.lastHeartbeatTimestamp = System.currentTimeMillis()
                 keyManager.serverBusy = body.busy
                 keyManager.busySessionId = body.busySessionId
+                BridgeRuntimeState.updateActivePaymentOrders(body.activeOrders)
 
                 // admin3 is authoritative for provider config & dynamic rules
                 keyManager.vfCashEnabled = body.vfCashEnabled
@@ -107,6 +108,7 @@ class BridgeHeartbeatLoop(
             } else {
                 keyManager.lastServerResponse = "HTTP ${response.code()}: ${response.message()}"
                 if (response.code() == 401) {
+                    BridgeRuntimeState.clearActivePaymentOrders()
                     keyManager.invalidateProvisioning(
                         "فشل توثيق HMAC. أعد ربط الجهاز من الإعدادات."
                     )
