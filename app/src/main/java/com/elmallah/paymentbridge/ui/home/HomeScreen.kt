@@ -97,8 +97,6 @@ fun HomeScreen(
     val setupDismissed by viewModel.setupDismissed.collectAsState()
     val lastEvent by viewModel.lastEvent.collectAsState()
     val activePaymentOrders by viewModel.activePaymentOrders.collectAsState()
-    val pendingCount by viewModel.pendingUploadsCount.collectAsState()
-    val failedCount by viewModel.failedUploadsCount.collectAsState()
 
     val checklist = viewModel.checklistState
     val deviceStatus = viewModel.deviceStatus
@@ -530,7 +528,7 @@ fun HomeScreen(
             }
         }
 
-        // Payment monitoring
+        // Simple monitoring summary; technical diagnostics stay in Settings / Events.
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -545,70 +543,40 @@ fun HomeScreen(
                 ) {
                     Column {
                         Text(
-                            text = "مراقبة المعاملات المالية",
+                            text = "المراقبة",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (monitoring.isMonitoringActive) "المراقبة الميدانية نشطة وتعمل بالخلفية" else "المراقبة متوقفة (تحتاج تفعيل الصلاحية والخدمة)",
+                            text = if (monitoring.isMonitoringActive)
+                                "جاهز لالتقاط تأكيدات الدفع"
+                            else "المراقبة متوقفة",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (monitoring.isMonitoringActive) EmeraldSuccess else CoralError
                         )
                     }
-
-                    // Active Rules Badge
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Text(
-                            text = "${monitoring.activeRulesCount} مصادر دفع نشطة",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Queue Metrics Row: Pending vs Failed
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    MetricCounter(
-                        label = "معلق للمزامنة",
-                        count = pendingCount,
-                        color = if (pendingCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCounter(
-                        label = "فشل / مكرر",
-                        count = failedCount,
-                        color = if (failedCount > 0) CoralError else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
+                    StatusPill(
+                        label = "${monitoring.activeRulesCount} مصادر نشطة",
+                        color = if (monitoring.activeRulesCount > 0) EmeraldSuccess else AmberWarning,
+                        bgColor = if (monitoring.activeRulesCount > 0) EmeraldContainer else AmberContainer
                     )
                 }
 
-                // Last parsed payment info
                 if (monitoring.lastParsedAmountMinor != null) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = EmeraldContainer,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(10.dp),
+                            modifier = Modifier.padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
                                 Text(
-                                    text = "آخر عملية تم التقاطها",
+                                    text = "آخر دفعة تم التقاطها",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = EmeraldSuccess
                                 )
@@ -630,20 +598,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Last detected notification snippet
-                if (!monitoring.lastDetectedNotification.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "آخر إشعار مستلم: ${monitoring.lastDetectedNotification}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Action Buttons
+                Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -654,25 +609,14 @@ fun HomeScreen(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        if (isSyncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("جاري الإرسال...")
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("مزامنة فورية")
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isSyncing) "جاري التحديث..." else "تحديث الآن")
                     }
-
                     OutlinedButton(
                         onClick = onNavigateToEvents,
                         shape = RoundedCornerShape(10.dp),
@@ -684,12 +628,11 @@ fun HomeScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("عرض العمليات")
+                        Text("سجل العمليات")
                     }
                 }
             }
         }
-
         // 4. CARD C: RECENT PAYMENT EVENTS PREVIEW
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
