@@ -96,6 +96,7 @@ fun HomeScreen(
     val syncMessage by viewModel.syncMessage.collectAsState()
     val setupDismissed by viewModel.setupDismissed.collectAsState()
     val lastEvent by viewModel.lastEvent.collectAsState()
+    val activePaymentOrders by viewModel.activePaymentOrders.collectAsState()
     val pendingCount by viewModel.pendingUploadsCount.collectAsState()
     val failedCount by viewModel.failedUploadsCount.collectAsState()
 
@@ -435,7 +436,101 @@ fun HomeScreen(
             }
         }
 
-        // 3. CARD B: PAYMENT MONITORING
+        // Active payment orders assigned by admin3
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "طلبات الدفع الحالية",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (activePaymentOrders.isEmpty())
+                                "لا يوجد طلب ينتظر تحويلاً على هذا الجهاز"
+                            else "هذه الطلبات فقط هي التي ينتظر الجهاز تحويلها الآن",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (activePaymentOrders.isEmpty())
+                            MaterialTheme.colorScheme.surfaceVariant
+                        else AmberContainer
+                    ) {
+                        Text(
+                            text = activePaymentOrders.size.toString(),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (activePaymentOrders.isEmpty())
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            else AmberWarning,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+
+                if (activePaymentOrders.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    activePaymentOrders.forEachIndexed { index, order ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = order.orderNumber,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                    Text(
+                                        text = if (order.provider == "vf_cash") "فودافون كاش" else "إنستا باي",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "${amountFormat.format(order.expectedAmount)} ج.م",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "بانتظار التحويل",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AmberWarning
+                                    )
+                                }
+                            }
+                        }
+                        if (index < activePaymentOrders.lastIndex) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Payment monitoring
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
